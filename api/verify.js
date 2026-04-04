@@ -1,4 +1,3 @@
-
 export default function handler(req, res) {
   const { tagId } = req.query;
 
@@ -9,12 +8,16 @@ export default function handler(req, res) {
     });
   }
 
-  if (tagId === "FUR-000001") {
-    return res.status(200).json({
-      status: "VERIFIED",
+  const registry = {
+    "FUR-2026-000001": {
       product: "Organic Cotton Tote Bag",
-      brand: "Example Brand Ltd"
-    });
+      brand: "Example Brand Ltd",
+      status: "VERIFIED"
+    }
+  };
+
+  if (registry[tagId]) {
+    return res.status(200).json(registry[tagId]);
   }
 
   return res.status(404).json({
