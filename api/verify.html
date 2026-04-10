@@ -1,50 +1,99 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>FUR Verification</title>
+  <title>FUR Verification Result</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       background: #fff;
       color: #111;
       text-align: center;
-      padding: 80px;
+      padding: 80px 20px;
     }
     h1 {
-      font-size: 32px;
+      font-size: 36px;
+      margin-bottom: 10px;
     }
     .status {
-      font-size: 20px;
-      margin: 20px 0;
+      font-size: 22px;
       font-weight: bold;
+      margin-bottom: 20px;
     }
     .verified {
       color: green;
     }
+    .not-verified {
+      color: red;
+    }
     .box {
-      margin-top: 30px;
-      padding: 20px;
+      max-width: 500px;
+      margin: 30px auto;
+      padding: 24px;
       border: 1px solid #ccc;
-      display: inline-block;
       text-align: left;
+    }
+    .row {
+      margin-bottom: 12px;
+    }
+    .label {
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
 
-  <h1>✔ VERIFIED</h1>
+  <h1>FUR Verification Result</h1>
+  <div id="status" class="status">Checking...</div>
 
-  <div class="status verified">
-    Confirmed by FUR Verification System
+  <div id="result" class="box" style="display:none;">
+    <div class="row"><span class="label">Product ID:</span> <span id="productId"></span></div>
+    <div class="row"><span class="label">Product:</span> <span id="product"></span></div>
+    <div class="row"><span class="label">Brand:</span> <span id="brand"></span></div>
+    <div class="row"><span class="label">Status:</span> <span id="verificationStatus"></span></div>
   </div>
 
-  <div class="box">
-    <p><strong>Product ID:</strong> FUR-000001</p>
-    <p><strong>Product:</strong> Organic Cotton Tote Bag</p>
-    <p><strong>Brand:</strong> Example Brand Ltd</p>
-    <p><strong>Status:</strong> Verified</p>
-    <p><strong>Location:</strong> London, UK</p>
-  </div>
+  <script>
+    async function runVerification() {
+      const params = new URLSearchParams(window.location.search);
+      const tagId = params.get("tagId");
+
+      const statusEl = document.getElementById("status");
+      const resultEl = document.getElementById("result");
+
+      if (!tagId) {
+        statusEl.textContent = "Missing Tag ID";
+        statusEl.className = "status not-verified";
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/verify?tagId=${encodeURIComponent(tagId)}`);
+        const data = await response.json();
+
+        if (response.ok && data.status === "VERIFIED") {
+          statusEl.textContent = "✔ VERIFIED";
+          statusEl.className = "status verified";
+
+          document.getElementById("productId").textContent = tagId;
+          document.getElementById("product").textContent = data.product || "-";
+          document.getElementById("brand").textContent = data.brand || "-";
+          document.getElementById("verificationStatus").textContent = data.status || "-";
+
+          resultEl.style.display = "block";
+        } else {
+          statusEl.textContent = "✘ NOT VERIFIED";
+          statusEl.className = "status not-verified";
+        }
+      } catch (error) {
+        statusEl.textContent = "Verification error";
+        statusEl.className = "status not-verified";
+      }
+    }
+
+    runVerification();
+  </script>
 
 </body>
 </html>
+
+ 
