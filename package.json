@@ -1,0 +1,8 @@
+{
+  "name": "fur-verification",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
