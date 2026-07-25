@@ -1,40 +1,97 @@
-# FUR Verification
+<!DOCTYPE html>
+<html>
+<head>
+  <title>FUR Verification Result</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #fff;
+      color: #111;
+      text-align: center;
+      padding: 80px 20px;
+    }
+    h1 {
+      font-size: 36px;
+      margin-bottom: 10px;
+    }
+    .status {
+      font-size: 22px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+    .verified {
+      color: green;
+    }
+    .not-verified {
+      color: red;
+    }
+    .box {
+      max-width: 500px;
+      margin: 30px auto;
+      padding: 24px;
+      border: 1px solid #ccc;
+      text-align: left;
+    }
+    .row {
+      margin-bottom: 12px;
+    }
+    .label {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
 
-## Verification API contract
+  <h1>FUR Verification Result</h1>
+  <div id="status" class="status">Checking...</div>
 
-Endpoint: `GET /api/verify?tagId=<TAG_ID>`
+  <div id="result" class="box" style="display:none;">
+    <div class="row"><span class="label">Product ID:</span> <span id="productId"></span></div>
+    <div class="row"><span class="label">Product:</span> <span id="product"></span></div>
+    <div class="row"><span class="label">Brand:</span> <span id="brand"></span></div>
+    <div class="row"><span class="label">Status:</span> <span id="verificationStatus"></span></div>
+  </div>
 
-### Responses
+  <script>
+    async function runVerification() {
+      const params = new URLSearchParams(window.location.search);
+      const tagId = params.get("tagId");
 
-- **200 OK**
-  ```json
-  {
-    "status": "VERIFIED",
-    "tagId": "FUR-000001",
-    "product": "Organic Cotton Tote Bag",
-    "brand": "Example Brand Ltd"
-  }
-  ```
+      const statusEl = document.getElementById("status");
+      const resultEl = document.getElementById("result");
 
-- **404 Not Found**
-  ```json
-  {
-    "status": "NOT_VERIFIED",
-    "tagId": "FUR-999999",
-    "message": "Product not found"
-  }
-  ```
+      if (!tagId) {
+        statusEl.textContent = "Missing Tag ID";
+        statusEl.className = "status not-verified";
+        return;
+      }
 
-- **400 Bad Request**
-  ```json
-  {
-    "status": "ERROR",
-    "message": "Missing tagId"
-  }
-  ```
+      try {
+        const response = await fetch(`/api/verify?tagId=${encodeURIComponent(tagId)}`);
+        const data = await response.json();
 
-## Local test command
+        if (response.ok && data.status === "VERIFIED") {
+          statusEl.textContent = "✔ VERIFIED";
+          statusEl.className = "status verified";
 
-```bash
-npm test
-```
+          document.getElementById("productId").textContent = tagId;
+          document.getElementById("product").textContent = data.product || "-";
+          document.getElementById("brand").textContent = data.brand || "-";
+          document.getElementById("verificationStatus").textContent = data.status || "-";
+
+          resultEl.style.display = "block";
+        } else {
+          statusEl.textContent = "✘ NOT VERIFIED";
+          statusEl.className = "status not-verified";
+        }
+      } catch (error) {
+        statusEl.textContent = "Verification error";
+        statusEl.className = "status not-verified";
+      }
+    }
+
+    runVerification();
+  </script>
+
+</body>
+</html> 
