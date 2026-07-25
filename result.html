@@ -1,30 +1,164 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FUR Verification Result</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      font-family: Arial, sans-serif;
+      background: #f4f4f1;
+      color: #111;
+    }
+    .card {
+      width: 100%;
+      max-width: 620px;
+      background: #fff;
+      border: 1px solid #d6d6d0;
+      box-shadow: 0 12px 35px rgba(0,0,0,0.08);
+      padding: 42px;
+    }
+    .header {
+      text-align: center;
+      border-bottom: 1px solid #e4e4df;
+      padding-bottom: 28px;
+      margin-bottom: 28px;
+    }
+    .brand {
+      margin: 0;
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: 3px;
+    }
+    .subtitle {
+      margin: 8px 0 0;
+      font-size: 16px;
+    }
+    .status {
+      text-align: center;
+      margin: 0 0 26px;
+      font-size: 30px;
+      font-weight: 800;
+    }
+    .verified { color: #18733f; }
+    .not-verified { color: #a32626; }
+    .details {
+      border: 1px solid #deded8;
+      padding: 8px 22px;
+      background: #fafaf8;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 16px;
+      padding: 15px 0;
+      border-bottom: 1px solid #e6e6e1;
+    }
+    .row:last-child { border-bottom: 0; }
+    .label { font-weight: 700; }
+    .message {
+      margin: 24px 0 0;
+      text-align: center;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+    .seal-line {
+      margin-top: 26px;
+      padding-top: 18px;
+      border-top: 1px solid #e4e4df;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .back {
+      display: block;
+      width: fit-content;
+      margin: 28px auto 0;
+      padding: 12px 20px;
+      border: 1px solid #111;
+      color: #111;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .back:hover,
+    .back:focus { background: #111; color: #fff; }
+    @media (max-width: 560px) {
+      .card { padding: 28px 20px; }
+      .row { grid-template-columns: 1fr; gap: 5px; }
+      .brand { font-size: 40px; }
+    }
+  </style>
 </head>
-<body style="font-family:Arial;text-align:center;margin-top:100px;">
-  <h1>FUR Verification Result</h1>
-  <div id="result">Checking...</div>
+<body>
+  <main class="card">
+    <div class="header">
+      <h1 class="brand">FUR</h1>
+      <p class="subtitle">Independent Product Verification</p>
+    </div>
+
+    <div id="status" class="status">Checking…</div>
+
+    <section id="details" class="details" hidden>
+      <div class="row"><span class="label">Product ID</span><span id="productId"></span></div>
+      <div class="row"><span class="label">Product</span><span id="product"></span></div>
+      <div class="row"><span class="label">Brand</span><span id="brand"></span></div>
+      <div class="row"><span class="label">Registry status</span><span id="registryStatus"></span></div>
+    </section>
+
+    <p id="message" class="message"></p>
+    <div class="seal-line">Verified against the FUR Verification Registry.</div>
+    <a class="back" href="/">Return to homepage</a>
+  </main>
 
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const tagId = params.get("tagId");
+    async function runVerification() {
+      const params = new URLSearchParams(window.location.search);
+      const tagId = params.get('tagId');
+      const status = document.getElementById('status');
+      const details = document.getElementById('details');
+      const message = document.getElementById('message');
 
-    fetch("/api/verify?tagId=" + tagId)
-      .then(r => r.json())
-      .then(data => {
-        document.getElementById("result").innerHTML = `
-          <h2 style="color:green;">${data.status}</h2>
-          <p><strong>Product ID:</strong> ${data.tagId}</p>
-          <p><strong>Product:</strong> ${data.product}</p>
-          <p><strong>Brand:</strong> ${data.brand}</p>
-        `;
-      })
-      .catch(() => {
-        document.getElementById("result").innerHTML =
-          "<h2 style='color:red;'>Verification failed</h2>";
-      });
+      if (!tagId) {
+        status.textContent = 'NOT VERIFIED';
+        status.className = 'status not-verified';
+        message.textContent = 'No FUR Tag ID was supplied.';
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/verify?tagId=' + encodeURIComponent(tagId));
+        const data = await response.json();
+
+        if (response.ok && data.status === 'VERIFIED') {
+          status.textContent = '✓ VERIFIED';
+          status.className = 'status verified';
+          document.getElementById('productId').textContent = data.tagId || tagId;
+          document.getElementById('product').textContent = data.product || '—';
+          document.getElementById('brand').textContent = data.brand || '—';
+          document.getElementById('registryStatus').textContent = data.status;
+          details.hidden = false;
+          message.textContent = 'Tag ID matched. Product record confirmed.';
+        } else {
+          status.textContent = '✕ NOT VERIFIED';
+          status.className = 'status not-verified';
+          message.textContent = 'This Tag ID could not be confirmed against the FUR Verification Registry.';
+        }
+      } catch (error) {
+        status.textContent = 'VERIFICATION ERROR';
+        status.className = 'status not-verified';
+        message.textContent = 'The verification service is temporarily unavailable.';
+      }
+    }
+
+    runVerification();
   </script>
 </body>
 </html>
