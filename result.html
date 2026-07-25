@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>FUR Verification Result</title>
+</head>
+<body style="font-family:Arial;text-align:center;margin-top:100px;">
+  <h1>FUR Verification Result</h1>
+  <div id="result">Checking...</div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const tagId = params.get("tagId");
+
+    fetch("/api/verify?tagId=" + tagId)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById("result").innerHTML = `
+          <h2 style="color:green;">${data.status}</h2>
+          <p><strong>Product ID:</strong> ${data.tagId}</p>
+          <p><strong>Product:</strong> ${data.product}</p>
+          <p><strong>Brand:</strong> ${data.brand}</p>
+        `;
+      })
+      .catch(() => {
+        document.getElementById("result").innerHTML =
+          "<h2 style='color:red;'>Verification failed</h2>";
+      });
+  </script>
+</body>
+</html>
