@@ -2,6 +2,14 @@ const VERIFIED_TAGS = {
   "FUR-000001": {
     product: "Organic Cotton Tote Bag",
     brand: "Example Brand Ltd"
+  },
+  "FUR-000002": {
+    product: "Recycled Cotton Shopper",
+    brand: "Example Brand Ltd"
+  },
+  "FUR-000003": {
+    product: "Organic Cotton Drawstring Bag",
+    brand: "Sample Maker Ltd"
   }
 };
 
@@ -10,6 +18,14 @@ function buildResponse(status, extras = {}) {
     status,
     ...extras
   };
+}
+
+function createVerificationId(tagId) {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10).replaceAll("-", "");
+  const time = now.toISOString().slice(11, 19).replaceAll(":", "");
+  const tagSuffix = tagId.replace(/[^0-9]/g, "").slice(-6).padStart(6, "0");
+  return `VR-${date}-${time}-${tagSuffix}`;
 }
 
 export default function handler(req, res) {
@@ -29,6 +45,8 @@ export default function handler(req, res) {
     return res.status(200).json(
       buildResponse("VERIFIED", {
         tagId,
+        verificationId: createVerificationId(tagId),
+        verifiedAt: new Date().toISOString(),
         ...product
       })
     );
@@ -42,4 +60,4 @@ export default function handler(req, res) {
   );
 }
 
-export { VERIFIED_TAGS, buildResponse };
+export { VERIFIED_TAGS, buildResponse, createVerificationId };
