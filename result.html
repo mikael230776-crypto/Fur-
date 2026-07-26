@@ -149,6 +149,7 @@
     <section id="verificationMeta" class="verification-meta" hidden>
       <div class="row"><span class="label">Verification date</span><span id="verificationDate"></span></div>
       <div class="row"><span class="label">Verification time</span><span id="verificationTime"></span></div>
+      <div class="row"><span class="label">Verification ID</span><span id="verificationId"></span></div>
       <div class="row"><span class="label">Registry reference</span><span id="registryReference"></span></div>
     </section>
 
@@ -199,7 +200,9 @@ Independent Product Verification Authority
           document.getElementById('brand').textContent = data.brand || '—';
           document.getElementById('registryStatus').textContent = data.status;
           document.getElementById('verificationDate').textContent = dateFormatter.format(now);
+          document.getElementById('verificationTime').textContent = timeFormatter.format(now)
           document.getElementById('verificationTime').textContent = timeFormatter.format(now);
+          document.getElementById('registryReference').textContent = data.tagId || tagId;;
           document.getElementById('registryReference').textContent = data.tagId || tagId;
           details.hidden = false;
           verificationMeta.hidden = false;
