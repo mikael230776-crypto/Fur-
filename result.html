@@ -3,14 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FUR  independant verification recordt</title> 
-  Verification Date
-  25 july 2026
-  verification time
-  13.54 BST
-  Registry reference
-  FUR-000001
-  
+  <title>FUR Independent Verification Record</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -55,19 +48,33 @@
       margin: 9px 0 0;
       font-size: 16px;
     }
+    .seal {
+      width: 240px;
+      max-width: 72%;
+      margin: 30px auto 24px;
+      display: block;
+    }
     .status {
       text-align: center;
-      margin: 0 0 26px;
+      margin: 0 0 8px;
       font-size: 30px;
       font-weight: 800;
     }
+    .record-title {
+      margin: 0 0 26px;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 700;
+    }
     .verified { color: #18733f; }
     .not-verified { color: #a32626; }
-    .details {
+    .details,
+    .verification-meta {
       border: 1px solid #deded8;
       padding: 8px 22px;
       background: #fafaf8;
     }
+    .verification-meta { margin-top: 20px; }
     .row {
       display: grid;
       grid-template-columns: 150px 1fr;
@@ -82,6 +89,7 @@
       text-align: center;
       line-height: 1.6;
       font-size: 15px;
+      font-weight: 600;
     }
     .seal-line {
       margin-top: 26px;
@@ -91,6 +99,12 @@
       font-size: 13px;
       font-weight: 700;
       letter-spacing: 0.3px;
+    }
+    .motto {
+      margin: 10px 0 0;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
     }
     .back {
       display: block;
@@ -108,6 +122,7 @@
       .card { padding: 28px 20px; }
       .row { grid-template-columns: 1fr; gap: 5px; }
       .brand { font-size: 40px; }
+      .seal { width: 210px; }
     }
   </style>
 </head>
@@ -117,15 +132,12 @@
       <h1 class="brand">FUR</h1>
       <p class="values">Freedom • Unity • Respect</p>
       <p class="subtitle">Independent Product Verification</p>
-    </div> </div>
+    </div>
 
-<img src="fur-authority-seal.png"
-     alt="FUR Authority Seal"
-     style="width:240px; margin:30px auto; display:block;">
+    <img class="seal" src="fur-authority-seal.png" alt="FUR Authority Seal">
 
-<div id="status" class="status">Checking...</div>
-
-    
+    <div id="status" class="status">Checking…</div>
+    <p class="record-title">Independent Verification Record</p>
 
     <section id="details" class="details" hidden>
       <div class="row"><span class="label">Product ID</span><span id="productId"></span></div>
@@ -134,8 +146,15 @@
       <div class="row"><span class="label">Registry status</span><span id="registryStatus"></span></div>
     </section>
 
+    <section id="verificationMeta" class="verification-meta" hidden>
+      <div class="row"><span class="label">Verification date</span><span id="verificationDate"></span></div>
+      <div class="row"><span class="label">Verification time</span><span id="verificationTime"></span></div>
+      <div class="row"><span class="label">Registry reference</span><span id="registryReference"></span></div>
+    </section>
+
     <p id="message" class="message"></p>
     <div class="seal-line">Verified against the FUR Verification Registry.</div>
+    <p class="motto">No Promises — Only Proof.</p>
     <a class="back" href="/">Return to homepage</a>
   </main>
 
@@ -145,6 +164,7 @@
       const tagId = params.get('tagId');
       const status = document.getElementById('status');
       const details = document.getElementById('details');
+      const verificationMeta = document.getElementById('verificationMeta');
       const message = document.getElementById('message');
 
       if (!tagId) {
@@ -159,14 +179,27 @@
         const data = await response.json();
 
         if (response.ok && data.status === 'VERIFIED') {
+          const now = new Date();
+          const dateFormatter = new Intl.DateTimeFormat('en-GB', {
+            day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Europe/London'
+          });
+          const timeFormatter = new Intl.DateTimeFormat('en-GB', {
+            hour: '2-digit', minute: '2-digit', hour12: false,
+            timeZone: 'Europe/London', timeZoneName: 'short'
+          });
+
           status.textContent = '✓ VERIFIED';
           status.className = 'status verified';
           document.getElementById('productId').textContent = data.tagId || tagId;
           document.getElementById('product').textContent = data.product || '—';
           document.getElementById('brand').textContent = data.brand || '—';
           document.getElementById('registryStatus').textContent = data.status;
+          document.getElementById('verificationDate').textContent = dateFormatter.format(now);
+          document.getElementById('verificationTime').textContent = timeFormatter.format(now);
+          document.getElementById('registryReference').textContent = data.tagId || tagId;
           details.hidden = false;
-          message.textContent = 'Tag ID matched. Product record confirmed.';
+          verificationMeta.hidden = false;
+          message.textContent = 'This product has been independently verified against the FUR Verification Registry.';
         } else {
           status.textContent = '✕ NOT VERIFIED';
           status.className = 'status not-verified';
