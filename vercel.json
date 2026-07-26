@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/verify.js": {
-      "runtime": "nodejs22.x"
+      "maxDuration": 10
     }
   }
 }
