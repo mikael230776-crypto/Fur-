@@ -1,18 +1,3 @@
-const VERIFIED_TAGS = {
-  "FUR-000001": {
-    product: "Organic Cotton Tote Bag",
-    brand: "Example Brand Ltd"
-  },
-  "FUR-000002": {
-    product: "Recycled Cotton Shopper",
-    brand: "Example Brand Ltd"
-  },
-  "FUR-000003": {
-    product: "Organic Cotton Drawstring Bag",
-    brand: "Sample Maker Ltd"
-  }
-};
-
 function buildResponse(status, extras = {}) {
   return {
     status,
@@ -28,7 +13,7 @@ function createVerificationId(tagId) {
   return `VR-${date}-${time}-${tagSuffix}`;
 }
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   const { tagId } = req.query ?? {};
 
   if (!tagId) {
@@ -39,25 +24,82 @@ export default function handler(req, res) {
     );
   }
 
-  const product = VERIFIED_TAGS[tagId];
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
 
-  if (product) {
-    return res.status(200).json(
-      buildResponse("VERIFIED", {
-        tagId,
-        verificationId: createVerificationId(tagId),
-        verifiedAt: new Date().toISOString(),
-        ...product
+  if (!supabaseUrl || !supabaseSecretKey) {
+    return res.status(500).json(
+      buildResponse("ERROR", {
+        message: "Supabase environment variables are missing"
       })
     );
   }
 
-  return res.status(404).json(
-    buildResponse("NOT_VERIFIED", {
-      tagId,
-      message: "Product not found"
-    })
-  );
+  try {
+    const endpoint =
+      `${supabaseUrl}/rest/v1/Products` +
+      `?tag_id=eq.${encodeURIComponent(tagId)}` +
+      `&select=tag_id,product,brand,status` +
+      `&limit=1`;
+
+    const response = await fetch(endpoint, {
+      headers: {
+        apikey: supabaseSecretKey,
+        Authorization: `Bearer ${supabaseSecretKey}`,
+        Accept: "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Supabase query failed:", response.status, errorText);
+      return res.status(502).json(
+        buildResponse("ERROR", {
+          message: "Registry lookup failed"
+        })
+      );
+    }
+
+    const rows = await response.json();
+    const product = rows[0];
+
+    if (!product) {
+      return res.status(404).json(
+        buildResponse("NOT_VERIFIED", {
+          tagId,
+          message: "Product not found"
+        })
+      );
+    }
+
+    if (product.status !== "VERIFIED") {
+      return res.status(200).json(
+        buildResponse(product.status || "NOT_VERIFIED", {
+          tagId: product.tag_id,
+          product: product.product,
+          brand: product.brand,
+          message: "Product record is not currently verified"
+        })
+      );
+    }
+
+    return res.status(200).json(
+      buildResponse("VERIFIED", {
+        tagId: product.tag_id,
+        product: product.product,
+        brand: product.brand,
+        verificationId: createVerificationId(product.tag_id),
+        verifiedAt: new Date().toISOString()
+      })
+    );
+  } catch (error) {
+    console.error("Verification API error:", error);
+    return res.status(500).json(
+      buildResponse("ERROR", {
+        message: "Verification service is temporarily unavailable"
+      })
+    );
+  }
 }
 
-export { VERIFIED_TAGS, buildResponse, createVerificationId };
+export { buildResponse, createVerificationId };
