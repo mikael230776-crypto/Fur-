@@ -102,6 +102,32 @@ test('returns VERIFIED registry data for a known tag', async () => {
   assert.doesNotThrow(() => new Date(res.payload.verifiedAt));
 });
 
+test('normalises a lowercase tagId before querying the registry', async () => {
+  configureSupabase();
+  let requestedEndpoint;
+
+  globalThis.fetch = async (endpoint) => {
+    requestedEndpoint = endpoint;
+    return {
+      ok: true,
+      json: async () => [{
+        tag_id: 'FUR-000001',
+        product: 'Organic Cotton Tote Bag',
+        brand: 'Example Brand Ltd',
+        status: 'VERIFIED'
+      }]
+    };
+  };
+  const res = createRes();
+
+  await handler({ query: { tagId: '  fur-000001  ' } }, res);
+
+  assert.match(requestedEndpoint, /tag_id=eq\.FUR-000001/);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.status, 'VERIFIED');
+  assert.equal(res.payload.tagId, 'FUR-000001');
+});
+
 test('returns 404 NOT_VERIFIED when the registry has no matching tag', async () => {
   configureSupabase();
   globalThis.fetch = async () => ({
