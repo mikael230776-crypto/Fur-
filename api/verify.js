@@ -26,7 +26,14 @@ export default async function handler(req, res) {
     );
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL;
+   if (!/^FUR-\d{6}$/.test(tagId)) {
+    return res.status(400).json(
+      buildResponse("ERROR", {
+        message: "Invalid tagId format"
+      })
+    );
+   }
+     const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
 
   if (!supabaseUrl || !supabaseSecretKey) {
