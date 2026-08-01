@@ -14,7 +14,9 @@ function createVerificationId(tagId) {
 }
 
 export default async function handler(req, res) {
-  const { tagId } = req.query ?? {};
+  const rawTagId = req.query?.tagId;
+  const tagId =
+    typeof rawTagId === "string" ? rawTagId.trim().toUpperCase() : rawTagId;
 
   if (!tagId) {
     return res.status(400).json(
