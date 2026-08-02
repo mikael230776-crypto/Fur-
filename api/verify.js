@@ -97,48 +97,78 @@ export default async function handler(req, res) {
       );
     }
 
-    const verificationRecord = {
-      verification_id: createVerificationId(product.tag_id),
-      tag_id: product.tag_id,
-      verified_at: new Date().toISOString()
-    };
-    const verificationEndpoint =
+    const verificationLookupEndpoint =
       `${supabaseUrl}/rest/v1/verification_records` +
-      `?select=verification_id,tag_id,verified_at`;
+      `?tag_id=eq.${encodeURIComponent(product.tag_id)}` +
+      `&select=verification_id,tag_id,verified_at` +
+      `&order=verified_at.asc` +
+      `&limit=1`;
 
-    const verificationResponse = await fetch(verificationEndpoint, {
-      method: "POST",
-      headers: supabaseHeaders(supabaseSecretKey, {
-        "Content-Type": "application/json",
-        Prefer: "return=representation"
-      }),
-      body: JSON.stringify(verificationRecord)
+    const lookupResponse = await fetch(verificationLookupEndpoint, {
+      headers: supabaseHeaders(supabaseSecretKey)
     });
 
-    if (!verificationResponse.ok) {
-      const errorText = await verificationResponse.text();
+    if (!lookupResponse.ok) {
+      const errorText = await lookupResponse.text();
       console.error(
-        "Supabase verification record insert failed:",
-        verificationResponse.status,
+        "Supabase verification record lookup failed:",
+        lookupResponse.status,
         errorText
       );
       return res.status(502).json(
         buildResponse("ERROR", {
-          message: "Verification record could not be saved"
+          message: "Verification record could not be loaded"
         })
       );
     }
 
-    const savedRecords = await verificationResponse.json();
-    const savedRecord = savedRecords[0];
+    const existingRecords = await lookupResponse.json();
+    let savedRecord = existingRecords[0];
 
     if (!savedRecord) {
-      console.error("Supabase verification record insert returned no record");
-      return res.status(502).json(
-        buildResponse("ERROR", {
-          message: "Verification record could not be saved"
-        })
-      );
+      const verificationRecord = {
+        verification_id: createVerificationId(product.tag_id),
+        tag_id: product.tag_id,
+        verified_at: new Date().toISOString()
+      };
+      const verificationEndpoint =
+        `${supabaseUrl}/rest/v1/verification_records` +
+        `?select=verification_id,tag_id,verified_at`;
+
+      const verificationResponse = await fetch(verificationEndpoint, {
+        method: "POST",
+        headers: supabaseHeaders(supabaseSecretKey, {
+          "Content-Type": "application/json",
+          Prefer: "return=representation"
+        }),
+        body: JSON.stringify(verificationRecord)
+      });
+
+      if (!verificationResponse.ok) {
+        const errorText = await verificationResponse.text();
+        console.error(
+          "Supabase verification record insert failed:",
+          verificationResponse.status,
+          errorText
+        );
+        return res.status(502).json(
+          buildResponse("ERROR", {
+            message: "Verification record could not be saved"
+          })
+        );
+      }
+
+      const savedRecords = await verificationResponse.json();
+      savedRecord = savedRecords[0];
+
+      if (!savedRecord) {
+        console.error("Supabase verification record insert returned no record");
+        return res.status(502).json(
+          buildResponse("ERROR", {
+            message: "Verification record could not be saved"
+          })
+        );
+      }
     }
 
     return res.status(200).json(
