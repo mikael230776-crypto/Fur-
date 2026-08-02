@@ -5,12 +5,20 @@ function buildResponse(status, extras = {}) {
   };
 }
 
-function createVerificationId(tagId) {
-  const now = new Date();
+function createVerificationId(tagId, now = new Date()) {
   const date = now.toISOString().slice(0, 10).replaceAll("-", "");
   const time = now.toISOString().slice(11, 19).replaceAll(":", "");
   const tagSuffix = tagId.replace(/[^0-9]/g, "").slice(-6).padStart(6, "0");
   return `VR-${date}-${time}-${tagSuffix}`;
+}
+
+function supabaseHeaders(supabaseSecretKey, extras = {}) {
+  return {
+    apikey: supabaseSecretKey,
+    Authorization: `Bearer ${supabaseSecretKey}`,
+    Accept: "application/json",
+    ...extras
+  };
 }
 
 export default async function handler(req, res) {
@@ -26,14 +34,15 @@ export default async function handler(req, res) {
     );
   }
 
-   if (!/^FUR-\d{6}$/.test(tagId)) {
+  if (!/^FUR-\d{6}$/.test(tagId)) {
     return res.status(400).json(
       buildResponse("ERROR", {
         message: "Invalid tagId format"
       })
     );
-   }
-     const supabaseUrl = process.env.SUPABASE_URL;
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
 
   if (!supabaseUrl || !supabaseSecretKey) {
@@ -45,23 +54,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    const endpoint =
+    const productEndpoint =
       `${supabaseUrl}/rest/v1/Products` +
       `?tag_id=eq.${encodeURIComponent(tagId)}` +
       `&select=tag_id,product,brand,status` +
       `&limit=1`;
 
-    const response = await fetch(endpoint, {
-      headers: {
-        apikey: supabaseSecretKey,
-        Authorization: `Bearer ${supabaseSecretKey}`,
-        Accept: "application/json"
-      }
+    const productResponse = await fetch(productEndpoint, {
+      headers: supabaseHeaders(supabaseSecretKey)
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Supabase query failed:", response.status, errorText);
+    if (!productResponse.ok) {
+      const errorText = await productResponse.text();
+      console.error("Supabase query failed:", productResponse.status, errorText);
       return res.status(502).json(
         buildResponse("ERROR", {
           message: "Registry lookup failed"
@@ -69,7 +74,7 @@ export default async function handler(req, res) {
       );
     }
 
-    const rows = await response.json();
+    const rows = await productResponse.json();
     const product = rows[0];
 
     if (!product) {
@@ -92,13 +97,101 @@ export default async function handler(req, res) {
       );
     }
 
+    const verificationLookupEndpoint =
+      `${supabaseUrl}/rest/v1/verification_records` +
+      `?tag_id=eq.${encodeURIComponent(product.tag_id)}` +
+      `&select=verification_id,tag_id,verified_at` +
+      `&order=verified_at.asc` +
+      `&limit=1`;
+
+    const lookupResponse = await fetch(verificationLookupEndpoint, {
+      headers: supabaseHeaders(supabaseSecretKey)
+    });
+
+    if (!lookupResponse.ok) {
+      const errorText = await lookupResponse.text();
+      console.error(
+        "Supabase verification record lookup failed:",
+        lookupResponse.status,
+        errorText
+      );
+      return res.status(502).json(
+        buildResponse("ERROR", {
+          message: "Verification record could not be loaded"
+        })
+      );
+    }
+
+    const existingRecords = await lookupResponse.json();
+    let savedRecord = existingRecords[0];
+
+    if (!savedRecord) {
+      const verificationRecord = {
+        verification_id: createVerificationId(product.tag_id),
+        tag_id: product.tag_id,
+        verified_at: new Date().toISOString()
+      };
+      const verificationEndpoint =
+        `${supabaseUrl}/rest/v1/verification_records` +
+        `?select=verification_id,tag_id,verified_at`;
+
+      const verificationResponse = await fetch(verificationEndpoint, {
+        method: "POST",
+        headers: supabaseHeaders(supabaseSecretKey, {
+          "Content-Type": "application/json",
+          Prefer: "return=representation"
+        }),
+        body: JSON.stringify(verificationRecord)
+      });
+
+      if (!verificationResponse.ok) {
+        const errorText = await verificationResponse.text();
+
+        if (verificationResponse.status === 409) {
+          const conflictLookupResponse = await fetch(verificationLookupEndpoint, {
+            headers: supabaseHeaders(supabaseSecretKey)
+          });
+
+          if (conflictLookupResponse.ok) {
+            const conflictRecords = await conflictLookupResponse.json();
+            savedRecord = conflictRecords[0];
+          }
+        }
+
+        if (!savedRecord) {
+          console.error(
+            "Supabase verification record insert failed:",
+            verificationResponse.status,
+            errorText
+          );
+          return res.status(502).json(
+            buildResponse("ERROR", {
+              message: "Verification record could not be saved"
+            })
+          );
+        }
+      } else {
+        const savedRecords = await verificationResponse.json();
+        savedRecord = savedRecords[0];
+      }
+
+      if (!savedRecord) {
+        console.error("Supabase verification record insert returned no record");
+        return res.status(502).json(
+          buildResponse("ERROR", {
+            message: "Verification record could not be saved"
+          })
+        );
+      }
+    }
+
     return res.status(200).json(
       buildResponse("VERIFIED", {
-        tagId: product.tag_id,
+        tagId: savedRecord.tag_id,
         product: product.product,
         brand: product.brand,
-        verificationId: createVerificationId(product.tag_id),
-        verifiedAt: new Date().toISOString()
+        verificationId: savedRecord.verification_id,
+        verifiedAt: savedRecord.verified_at
       })
     );
   } catch (error) {
@@ -111,4 +204,4 @@ export default async function handler(req, res) {
   }
 }
 
-export { buildResponse, createVerificationId };
+export { buildResponse, createVerificationId, supabaseHeaders };
