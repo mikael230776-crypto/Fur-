@@ -146,20 +146,34 @@ export default async function handler(req, res) {
 
       if (!verificationResponse.ok) {
         const errorText = await verificationResponse.text();
-        console.error(
-          "Supabase verification record insert failed:",
-          verificationResponse.status,
-          errorText
-        );
-        return res.status(502).json(
-          buildResponse("ERROR", {
-            message: "Verification record could not be saved"
-          })
-        );
-      }
 
-      const savedRecords = await verificationResponse.json();
-      savedRecord = savedRecords[0];
+        if (verificationResponse.status === 409) {
+          const conflictLookupResponse = await fetch(verificationLookupEndpoint, {
+            headers: supabaseHeaders(supabaseSecretKey)
+          });
+
+          if (conflictLookupResponse.ok) {
+            const conflictRecords = await conflictLookupResponse.json();
+            savedRecord = conflictRecords[0];
+          }
+        }
+
+        if (!savedRecord) {
+          console.error(
+            "Supabase verification record insert failed:",
+            verificationResponse.status,
+            errorText
+          );
+          return res.status(502).json(
+            buildResponse("ERROR", {
+              message: "Verification record could not be saved"
+            })
+          );
+        }
+      } else {
+        const savedRecords = await verificationResponse.json();
+        savedRecord = savedRecords[0];
+      }
 
       if (!savedRecord) {
         console.error("Supabase verification record insert returned no record");
