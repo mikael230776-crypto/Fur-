@@ -26,25 +26,32 @@ function response({ ok = true, status = 200, json = [], text = "" } = {}) {
   };
 }
 
-test("persists and returns verification record", async () => {
+function verifiedProduct() {
+  return {
+    tag_id: "FUR-000001",
+    product: "Bag",
+    brand: "FUR",
+    status: "VERIFIED"
+  };
+}
+
+function configureSupabase() {
   process.env.SUPABASE_URL = "https://example.supabase.co";
   process.env.SUPABASE_SECRET_KEY = "secret";
+}
+
+test("persists and returns verification record", async () => {
+  configureSupabase();
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
     calls.push({ url, options });
 
     if (calls.length === 1) {
-      return response({
-        json: [
-          {
-            tag_id: "FUR-000001",
-            product: "Bag",
-            brand: "FUR",
-            status: "VERIFIED"
-          }
-        ]
-      });
+      return response({ json: [verifiedProduct()] });
+    }
+    if (calls.length === 2) {
+      return response({ json: [] });
     }
 
     const inserted = JSON.parse(options.body);
@@ -57,26 +64,53 @@ test("persists and returns verification record", async () => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.status, "VERIFIED");
   assert.match(res.body.verificationId, /^VR-\d{8}-\d{6}-000001$/);
-  assert.equal(calls[1].options.method, "POST");
+  assert.equal(calls[2].options.method, "POST");
   assert.match(calls[1].url, /verification_records/);
 });
 
+test("reuses the stored record on repeated verification", async () => {
+  configureSupabase();
+  const storedRecord = {
+    verification_id: "VR-20260802-115641-000001",
+    tag_id: "FUR-000001",
+    verified_at: "2026-08-02T11:56:41.000Z"
+  };
+  let savedRecord;
+  let insertCount = 0;
+
+  global.fetch = async (url, options = {}) => {
+    if (url.includes("/rest/v1/Products")) {
+      return response({ json: [verifiedProduct()] });
+    }
+
+    if (options.method === "POST") {
+      insertCount += 1;
+      savedRecord = JSON.parse(options.body);
+      return response({ json: [savedRecord] });
+    }
+
+    return response({ json: savedRecord ? [savedRecord] : [] });
+  };
+
+  const firstRes = mockRes();
+  await handler({ query: { tagId: "FUR-000001" } }, firstRes);
+  savedRecord = storedRecord;
+  const secondRes = mockRes();
+  await handler({ query: { tagId: "FUR-000001" } }, secondRes);
+
+  assert.equal(insertCount, 1);
+  assert.equal(secondRes.body.verificationId, storedRecord.verification_id);
+  assert.equal(secondRes.body.verifiedAt, storedRecord.verified_at);
+});
+
 test("does not insert for unverified product", async () => {
-  process.env.SUPABASE_URL = "https://example.supabase.co";
-  process.env.SUPABASE_SECRET_KEY = "secret";
+  configureSupabase();
   let calls = 0;
 
   global.fetch = async () => {
     calls += 1;
     return response({
-      json: [
-        {
-          tag_id: "FUR-000001",
-          product: "Bag",
-          brand: "FUR",
-          status: "PENDING"
-        }
-      ]
+      json: [{ ...verifiedProduct(), status: "PENDING" }]
     });
   };
 
@@ -89,26 +123,13 @@ test("does not insert for unverified product", async () => {
 });
 
 test("returns 502 when verification record insert fails", async () => {
-  process.env.SUPABASE_URL = "https://example.supabase.co";
-  process.env.SUPABASE_SECRET_KEY = "secret";
+  configureSupabase();
   let calls = 0;
 
   global.fetch = async () => {
     calls += 1;
-
-    if (calls === 1) {
-      return response({
-        json: [
-          {
-            tag_id: "FUR-000001",
-            product: "Bag",
-            brand: "FUR",
-            status: "VERIFIED"
-          }
-        ]
-      });
-    }
-
+    if (calls === 1) return response({ json: [verifiedProduct()] });
+    if (calls === 2) return response({ json: [] });
     return response({ ok: false, status: 500, text: "insert failed" });
   };
 
