@@ -197,7 +197,7 @@ export default async function handler(req, res) {
       buildResponse("VERIFIED", {
         tagId: savedRecord.tag_id,
         product: savedRecord.product ??product.product,
-        brand: saveRecord.brand ??product.brand,
+        brand: savedRecord.brand ??product.brand,
         verificationId: savedRecord.verification_id,
         verifiedAt: savedRecord.verified_at
       })
