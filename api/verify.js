@@ -100,7 +100,7 @@ export default async function handler(req, res) {
     const verificationLookupEndpoint =
       `${supabaseUrl}/rest/v1/verification_records` +
       `?tag_id=eq.${encodeURIComponent(product.tag_id)}` +
-      `&select=verification_id,tag_id,verified_at` +
+      `&select=verification_id,tag_id,verified_at,status,product,brand` +
       `&order=verified_at.asc` +
       `&limit=1`;
 
@@ -126,14 +126,22 @@ export default async function handler(req, res) {
     let savedRecord = existingRecords[0];
 
     if (!savedRecord) {
-      const verificationRecord = {
-        verification_id: createVerificationId(product.tag_id),
-        tag_id: product.tag_id,
-        verified_at: new Date().toISOString()
-      };
-      const verificationEndpoint =
+        const verificationRecord = {
+      verification_id: createVerificationId(product.tag_id),
+      tag_id: product.tag_id,
+      verified_at: new Date().toISOString(),
+      status: product.status,
+      product: product.product,
+      brand: product.brand
+    };
+      const verificationEndpoint =  
+        
+        
+      
+      
+      
         `${supabaseUrl}/rest/v1/verification_records` +
-        `?select=verification_id,tag_id,verified_at`;
+        ``?select=verification_id,tag_id,verified_at,status,product,brand`;
 
       const verificationResponse = await fetch(verificationEndpoint, {
         method: "POST",
@@ -188,8 +196,8 @@ export default async function handler(req, res) {
     return res.status(200).json(
       buildResponse("VERIFIED", {
         tagId: savedRecord.tag_id,
-        product: product.product,
-        brand: product.brand,
+        product: savedRecord.product ??product.product,
+        brand: saveRecord.brand ??product.brand,
         verificationId: savedRecord.verification_id,
         verifiedAt: savedRecord.verified_at
       })
