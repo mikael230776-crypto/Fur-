@@ -103,6 +103,42 @@ test("reuses the stored record on repeated verification", async () => {
   assert.equal(secondRes.body.verifiedAt, storedRecord.verified_at);
 });
 
+test("reuses the winning record after a concurrent insert conflict", async () => {
+  configureSupabase();
+  const storedRecord = {
+    verification_id: "VR-20260802-120000-000001",
+    tag_id: "FUR-000001",
+    verified_at: "2026-08-02T12:00:00.000Z"
+  };
+  let verificationLookups = 0;
+  let insertCount = 0;
+
+  global.fetch = async (url, options = {}) => {
+    if (url.includes("/rest/v1/Products")) {
+      return response({ json: [verifiedProduct()] });
+    }
+
+    if (options.method === "POST") {
+      insertCount += 1;
+      return response({ ok: false, status: 409, text: "duplicate key" });
+    }
+
+    verificationLookups += 1;
+    return response({
+      json: verificationLookups === 1 ? [] : [storedRecord]
+    });
+  };
+
+  const res = mockRes();
+  await handler({ query: { tagId: "FUR-000001" } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.verificationId, storedRecord.verification_id);
+  assert.equal(res.body.verifiedAt, storedRecord.verified_at);
+  assert.equal(insertCount, 1);
+  assert.equal(verificationLookups, 2);
+});
+
 test("does not insert for unverified product", async () => {
   configureSupabase();
   let calls = 0;
