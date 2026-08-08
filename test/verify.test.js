@@ -43,6 +43,7 @@ function configureSupabase() {
 test("persists and returns verification record", async () => {
   configureSupabase();
   const calls = [];
+  const createdAt = "2026-08-08T09:00:00.000Z";
 
   global.fetch = async (url, options = {}) => {
     calls.push({ url, options });
@@ -55,7 +56,7 @@ test("persists and returns verification record", async () => {
     }
 
     const inserted = JSON.parse(options.body);
-    return response({ json: [inserted] });
+    return response({ json: [{ ...inserted, created_at: createdAt }] });
   };
 
   const res = mockRes();
@@ -64,8 +65,11 @@ test("persists and returns verification record", async () => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.status, "VERIFIED");
   assert.match(res.body.verificationId, /^VR-\d{8}-\d{6}-000001$/);
+  assert.equal(res.body.verifiedAt, createdAt);
   assert.equal(calls[2].options.method, "POST");
   assert.match(calls[1].url, /verification_records/);
+  assert.match(calls[1].url, /created_at/);
+  assert.equal(JSON.parse(calls[2].options.body).created_at, undefined);
 });
 
 test("reuses the stored record on repeated verification", async () => {
@@ -73,7 +77,10 @@ test("reuses the stored record on repeated verification", async () => {
   const storedRecord = {
     verification_id: "VR-20260802-115641-000001",
     tag_id: "FUR-000001",
-    verified_at: "2026-08-02T11:56:41.000Z"
+    created_at: "2026-08-02T11:56:41.000Z",
+    status: "VERIFIED",
+    product: "Bag",
+    brand: "FUR"
   };
   let savedRecord;
   let insertCount = 0;
@@ -85,7 +92,10 @@ test("reuses the stored record on repeated verification", async () => {
 
     if (options.method === "POST") {
       insertCount += 1;
-      savedRecord = JSON.parse(options.body);
+      savedRecord = {
+        ...JSON.parse(options.body),
+        created_at: "2026-08-08T09:00:00.000Z"
+      };
       return response({ json: [savedRecord] });
     }
 
@@ -100,7 +110,7 @@ test("reuses the stored record on repeated verification", async () => {
 
   assert.equal(insertCount, 1);
   assert.equal(secondRes.body.verificationId, storedRecord.verification_id);
-  assert.equal(secondRes.body.verifiedAt, storedRecord.verified_at);
+  assert.equal(secondRes.body.verifiedAt, storedRecord.created_at);
 });
 
 test("reuses the winning record after a concurrent insert conflict", async () => {
@@ -108,7 +118,10 @@ test("reuses the winning record after a concurrent insert conflict", async () =>
   const storedRecord = {
     verification_id: "VR-20260802-120000-000001",
     tag_id: "FUR-000001",
-    verified_at: "2026-08-02T12:00:00.000Z"
+    created_at: "2026-08-02T12:00:00.000Z",
+    status: "VERIFIED",
+    product: "Bag",
+    brand: "FUR"
   };
   let verificationLookups = 0;
   let insertCount = 0;
@@ -134,7 +147,7 @@ test("reuses the winning record after a concurrent insert conflict", async () =>
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.verificationId, storedRecord.verification_id);
-  assert.equal(res.body.verifiedAt, storedRecord.verified_at);
+  assert.equal(res.body.verifiedAt, storedRecord.created_at);
   assert.equal(insertCount, 1);
   assert.equal(verificationLookups, 2);
 });
