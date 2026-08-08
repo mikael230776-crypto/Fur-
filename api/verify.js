@@ -1,3 +1,49 @@
+import { randomUUID } from "node:crypto";
+
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 30;
+const rateLimitStore =
+  globalThis.__furVerificationRateLimits ??
+  (globalThis.__furVerificationRateLimits = new Map());
+
+function getClientIp(req) {
+  const forwarded = req.headers?.["x-forwarded-for"];
+  const firstForwarded =
+    typeof forwarded === "string" ? forwarded.split(",")[0].trim() : null;
+
+  return firstForwarded || req.socket?.remoteAddress || "unknown";
+}
+
+function checkRateLimit(req, now = Date.now()) {
+  const clientIp = getClientIp(req);
+  const current = rateLimitStore.get(clientIp);
+
+  if (!current || now - current.startedAt >= RATE_LIMIT_WINDOW_MS) {
+    rateLimitStore.set(clientIp, { count: 1, startedAt: now });
+    return {
+      allowed: true,
+      remaining: RATE_LIMIT_MAX_REQUESTS - 1,
+      retryAfter: 0
+    };
+  }
+
+  current.count += 1;
+  const retryAfter = Math.max(
+    1,
+    Math.ceil((RATE_LIMIT_WINDOW_MS - (now - current.startedAt)) / 1000)
+  );
+
+  return {
+    allowed: current.count <= RATE_LIMIT_MAX_REQUESTS,
+    remaining: Math.max(0, RATE_LIMIT_MAX_REQUESTS - current.count),
+    retryAfter
+  };
+}
+
+function resetRateLimits() {
+  rateLimitStore.clear();
+}
+
 function buildResponse(status, extras = {}) {
   return {
     status,
@@ -22,9 +68,52 @@ function supabaseHeaders(supabaseSecretKey, extras = {}) {
 }
 
 export default async function handler(req, res) {
+  const requestId = randomUUID();
+  const startedAt = Date.now();
+  const method = (req.method || "GET").toUpperCase();
+  let loggedTagId = null;
+
+  res.setHeader?.("Cache-Control", "no-store");
+  res.setHeader?.("X-Request-ID", requestId);
+  res.on?.("finish", () => {
+    console.info(
+      JSON.stringify({
+        event: "verification_request",
+        requestId,
+        method,
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt,
+        tagId: loggedTagId
+      })
+    );
+  });
+
+  if (method !== "GET") {
+    res.setHeader?.("Allow", "GET");
+    return res.status(405).json(
+      buildResponse("ERROR", {
+        message: "Method not allowed"
+      })
+    );
+  }
+
+  const rateLimit = checkRateLimit(req);
+  res.setHeader?.("X-RateLimit-Limit", String(RATE_LIMIT_MAX_REQUESTS));
+  res.setHeader?.("X-RateLimit-Remaining", String(rateLimit.remaining));
+
+  if (!rateLimit.allowed) {
+    res.setHeader?.("Retry-After", String(rateLimit.retryAfter));
+    return res.status(429).json(
+      buildResponse("ERROR", {
+        message: "Too many verification requests. Please try again shortly."
+      })
+    );
+  }
+
   const rawTagId = req.query?.tagId;
   const tagId =
     typeof rawTagId === "string" ? rawTagId.trim().toUpperCase() : rawTagId;
+  loggedTagId = typeof tagId === "string" ? tagId : null;
 
   if (!tagId) {
     return res.status(400).json(
@@ -206,4 +295,10 @@ export default async function handler(req, res) {
   }
 }
 
-export { buildResponse, createVerificationId, supabaseHeaders };
+export {
+  buildResponse,
+  checkRateLimit,
+  createVerificationId,
+  resetRateLimits,
+  supabaseHeaders
+};

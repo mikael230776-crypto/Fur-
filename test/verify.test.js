@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import handler, { createVerificationId } from "../api/verify.js";
+import handler, {
+  checkRateLimit,
+  createVerificationId,
+  resetRateLimits
+} from "../api/verify.js";
 
 function mockRes() {
   return {
@@ -207,4 +211,116 @@ test("creates deterministic verification ID with supplied date", () => {
     createVerificationId("FUR-000123", new Date("2026-08-01T12:34:56.000Z")),
     "VR-20260801-123456-000123"
   );
+});
+
+
+test("limits repeated requests from the same visitor", () => {
+  resetRateLimits();
+  const req = {
+    headers: { "x-forwarded-for": "203.0.113.10" }
+  };
+
+  for (let count = 0; count < 30; count += 1) {
+    assert.equal(checkRateLimit(req, 1_000).allowed, true);
+  }
+
+  const blocked = checkRateLimit(req, 1_000);
+  assert.equal(blocked.allowed, false);
+  assert.equal(blocked.remaining, 0);
+  assert.equal(blocked.retryAfter, 60);
+
+  const differentVisitor = checkRateLimit(
+    { headers: { "x-forwarded-for": "203.0.113.11" } },
+    1_000
+  );
+  assert.equal(differentVisitor.allowed, true);
+});
+
+test("allows requests again after the rate-limit window", () => {
+  resetRateLimits();
+  const req = {
+    headers: { "x-forwarded-for": "203.0.113.12" }
+  };
+
+  for (let count = 0; count < 30; count += 1) {
+    checkRateLimit(req, 1_000);
+  }
+
+  assert.equal(checkRateLimit(req, 1_000).allowed, false);
+  assert.equal(checkRateLimit(req, 61_000).allowed, true);
+});
+
+test("rejects non-GET verification requests", async () => {
+  resetRateLimits();
+  const res = mockRes();
+  res.headers = {};
+  res.setHeader = function setHeader(name, value) {
+    this.headers[name] = value;
+  };
+
+  await handler(
+    {
+      method: "POST",
+      headers: { "x-forwarded-for": "203.0.113.13" },
+      query: { tagId: "FUR-000001" }
+    },
+    res
+  );
+
+  assert.equal(res.statusCode, 405);
+  assert.equal(res.body.status, "ERROR");
+  assert.equal(res.body.message, "Method not allowed");
+  assert.equal(res.headers.Allow, "GET");
+});
+
+
+test("logs the request outcome without logging the visitor IP", async () => {
+  resetRateLimits();
+  configureSupabase();
+
+  let finishHandler;
+  const messages = [];
+  const originalInfo = console.info;
+
+  global.fetch = async (url) => {
+    if (url.includes("/rest/v1/Products")) {
+      return response({ json: [] });
+    }
+    return response({ json: [] });
+  };
+
+  const res = mockRes();
+  res.headers = {};
+  res.setHeader = function setHeader(name, value) {
+    this.headers[name] = value;
+  };
+  res.on = function on(event, listener) {
+    if (event === "finish") finishHandler = listener;
+  };
+
+  console.info = (message) => messages.push(message);
+
+  try {
+    await handler(
+      {
+        method: "GET",
+        headers: { "x-forwarded-for": "203.0.113.14" },
+        query: { tagId: "FUR-999999" }
+      },
+      res
+    );
+    finishHandler();
+  } finally {
+    console.info = originalInfo;
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.match(res.headers["X-Request-ID"], /^[0-9a-f-]{36}$/i);
+
+  const log = JSON.parse(messages[0]);
+  assert.equal(log.event, "verification_request");
+  assert.equal(log.method, "GET");
+  assert.equal(log.statusCode, 404);
+  assert.equal(log.tagId, "FUR-999999");
+  assert.equal(JSON.stringify(log).includes("203.0.113.14"), false);
 });
