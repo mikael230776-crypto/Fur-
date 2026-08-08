@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
 const rateLimitStore =
@@ -66,9 +68,26 @@ function supabaseHeaders(supabaseSecretKey, extras = {}) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader?.("Cache-Control", "no-store");
-
+  const requestId = randomUUID();
+  const startedAt = Date.now();
   const method = (req.method || "GET").toUpperCase();
+  let loggedTagId = null;
+
+  res.setHeader?.("Cache-Control", "no-store");
+  res.setHeader?.("X-Request-ID", requestId);
+  res.on?.("finish", () => {
+    console.info(
+      JSON.stringify({
+        event: "verification_request",
+        requestId,
+        method,
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt,
+        tagId: loggedTagId
+      })
+    );
+  });
+
   if (method !== "GET") {
     res.setHeader?.("Allow", "GET");
     return res.status(405).json(
@@ -94,6 +113,7 @@ export default async function handler(req, res) {
   const rawTagId = req.query?.tagId;
   const tagId =
     typeof rawTagId === "string" ? rawTagId.trim().toUpperCase() : rawTagId;
+  loggedTagId = typeof tagId === "string" ? tagId : null;
 
   if (!tagId) {
     return res.status(400).json(
