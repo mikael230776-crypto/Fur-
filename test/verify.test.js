@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import handler, { createVerificationId } from "../api/verify.js";
+import handler, {
+  checkRateLimit,
+  createVerificationId,
+  resetRateLimits
+} from "../api/verify.js";
 
 function mockRes() {
   return {
@@ -207,4 +211,64 @@ test("creates deterministic verification ID with supplied date", () => {
     createVerificationId("FUR-000123", new Date("2026-08-01T12:34:56.000Z")),
     "VR-20260801-123456-000123"
   );
+});
+
+
+test("limits repeated requests from the same visitor", () => {
+  resetRateLimits();
+  const req = {
+    headers: { "x-forwarded-for": "203.0.113.10" }
+  };
+
+  for (let count = 0; count < 30; count += 1) {
+    assert.equal(checkRateLimit(req, 1_000).allowed, true);
+  }
+
+  const blocked = checkRateLimit(req, 1_000);
+  assert.equal(blocked.allowed, false);
+  assert.equal(blocked.remaining, 0);
+  assert.equal(blocked.retryAfter, 60);
+
+  const differentVisitor = checkRateLimit(
+    { headers: { "x-forwarded-for": "203.0.113.11" } },
+    1_000
+  );
+  assert.equal(differentVisitor.allowed, true);
+});
+
+test("allows requests again after the rate-limit window", () => {
+  resetRateLimits();
+  const req = {
+    headers: { "x-forwarded-for": "203.0.113.12" }
+  };
+
+  for (let count = 0; count < 30; count += 1) {
+    checkRateLimit(req, 1_000);
+  }
+
+  assert.equal(checkRateLimit(req, 1_000).allowed, false);
+  assert.equal(checkRateLimit(req, 61_000).allowed, true);
+});
+
+test("rejects non-GET verification requests", async () => {
+  resetRateLimits();
+  const res = mockRes();
+  res.headers = {};
+  res.setHeader = function setHeader(name, value) {
+    this.headers[name] = value;
+  };
+
+  await handler(
+    {
+      method: "POST",
+      headers: { "x-forwarded-for": "203.0.113.13" },
+      query: { tagId: "FUR-000001" }
+    },
+    res
+  );
+
+  assert.equal(res.statusCode, 405);
+  assert.equal(res.body.status, "ERROR");
+  assert.equal(res.body.message, "Method not allowed");
+  assert.equal(res.headers.Allow, "GET");
 });
