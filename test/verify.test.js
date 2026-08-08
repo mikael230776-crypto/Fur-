@@ -272,3 +272,55 @@ test("rejects non-GET verification requests", async () => {
   assert.equal(res.body.message, "Method not allowed");
   assert.equal(res.headers.Allow, "GET");
 });
+
+
+test("logs the request outcome without logging the visitor IP", async () => {
+  resetRateLimits();
+  configureSupabase();
+
+  let finishHandler;
+  const messages = [];
+  const originalInfo = console.info;
+
+  global.fetch = async (url) => {
+    if (url.includes("/rest/v1/Products")) {
+      return response({ json: [] });
+    }
+    return response({ json: [] });
+  };
+
+  const res = mockRes();
+  res.headers = {};
+  res.setHeader = function setHeader(name, value) {
+    this.headers[name] = value;
+  };
+  res.on = function on(event, listener) {
+    if (event === "finish") finishHandler = listener;
+  };
+
+  console.info = (message) => messages.push(message);
+
+  try {
+    await handler(
+      {
+        method: "GET",
+        headers: { "x-forwarded-for": "203.0.113.14" },
+        query: { tagId: "FUR-999999" }
+      },
+      res
+    );
+    finishHandler();
+  } finally {
+    console.info = originalInfo;
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.match(res.headers["X-Request-ID"], /^[0-9a-f-]{36}$/i);
+
+  const log = JSON.parse(messages[0]);
+  assert.equal(log.event, "verification_request");
+  assert.equal(log.method, "GET");
+  assert.equal(log.statusCode, 404);
+  assert.equal(log.tagId, "FUR-999999");
+  assert.equal(JSON.stringify(log).includes("203.0.113.14"), false);
+});
