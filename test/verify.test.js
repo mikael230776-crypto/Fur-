@@ -68,7 +68,10 @@ test("persists and returns verification record", async () => {
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.status, "VERIFIED");
-  assert.match(res.body.verificationId, /^VR-\d{8}-\d{6}-000001$/);
+  assert.match(
+    res.body.verificationId,
+    /^VR-\d{8}-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  );
   assert.equal(res.body.verifiedAt, createdAt);
   assert.equal(calls[2].options.method, "POST");
   assert.match(calls[1].url, /verification_records/);
@@ -206,13 +209,20 @@ test("rejects invalid tag format before calling Supabase", async () => {
   assert.equal(called, false);
 });
 
-test("creates deterministic verification ID with supplied date", () => {
+test("creates verification ID with date and unpredictable UUID", () => {
+  const uuid = "123e4567-e89b-42d3-a456-426614174000";
   assert.equal(
-    createVerificationId("FUR-000123", new Date("2026-08-01T12:34:56.000Z")),
-    "VR-20260801-123456-000123"
+    createVerificationId(new Date("2026-08-01T12:34:56.000Z"), uuid),
+    `VR-20260801-${uuid}`
   );
 });
 
+test("creates different verification IDs for the same date", () => {
+  const first = createVerificationId(new Date("2026-08-01T12:34:56.000Z"));
+  const second = createVerificationId(new Date("2026-08-01T12:34:56.000Z"));
+
+  assert.notEqual(first, second);
+});
 
 test("limits repeated requests from the same visitor", () => {
   resetRateLimits();
@@ -272,7 +282,6 @@ test("rejects non-GET verification requests", async () => {
   assert.equal(res.body.message, "Method not allowed");
   assert.equal(res.headers.Allow, "GET");
 });
-
 
 test("logs the request outcome without logging the visitor IP", async () => {
   resetRateLimits();
