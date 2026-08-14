@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import handler, {
   checkRateLimit,
   createVerificationId,
-  resetRateLimits
+  resetRateLimits,
+  saveVerificationScan,
+  scanHistoryEnabled
 } from "../api/verify.js";
 
 function mockRes() {
@@ -42,6 +44,7 @@ function verifiedProduct() {
 function configureSupabase() {
   process.env.SUPABASE_URL = "https://example.supabase.co";
   process.env.SUPABASE_SECRET_KEY = "secret";
+  delete process.env.ENABLE_SCAN_HISTORY;
 }
 
 test("persists and returns verification record", async () => {
@@ -330,6 +333,68 @@ test("logs the request outcome without logging the visitor IP", async () => {
   assert.equal(log.event, "verification_request");
   assert.equal(log.method, "GET");
   assert.equal(log.statusCode, 404);
-  assert.equal(log.tagId, "FUR-999999");
+  assert.equal(log.tagId, undefined);
+  assert.equal(log.tagState, "valid");
   assert.equal(JSON.stringify(log).includes("203.0.113.14"), false);
+});
+
+test("scan history is disabled unless explicitly enabled", () => {
+  delete process.env.ENABLE_SCAN_HISTORY;
+  assert.equal(scanHistoryEnabled(), false);
+  process.env.ENABLE_SCAN_HISTORY = "true";
+  assert.equal(scanHistoryEnabled(), true);
+  delete process.env.ENABLE_SCAN_HISTORY;
+});
+
+test("saves privacy-safe NFC scan history", async () => {
+  const calls = [];
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    return response({ status: 201 });
+  };
+
+  const saved = await saveVerificationScan(
+    "https://example.supabase.co",
+    "secret",
+    {
+      tagId: "FUR-000001",
+      requestId: "2b9a81ee-3c1f-4f3c-9b74-a1551a54d3ce",
+      resultStatus: "VERIFIED"
+    }
+  );
+
+  assert.equal(saved, true);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /verification_scans$/);
+  assert.equal(calls[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    tag_id: "FUR-000001",
+    request_id: "2b9a81ee-3c1f-4f3c-9b74-a1551a54d3ce",
+    result_status: "VERIFIED"
+  });
+  assert.equal(JSON.stringify(calls[0]).includes("203.0.113"), false);
+});
+
+test("reports scan history storage failure", async () => {
+  global.fetch = async () =>
+    response({ ok: false, status: 500, text: "insert failed" });
+
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    assert.equal(
+      await saveVerificationScan(
+        "https://example.supabase.co",
+        "secret",
+        {
+          tagId: "FUR-000001",
+          requestId: "78fceff4-905b-45fd-8b45-54c7e9471590",
+          resultStatus: "VERIFIED"
+        }
+      ),
+      false
+    );
+  } finally {
+    console.error = originalError;
+  }
 });
