@@ -56,6 +56,11 @@ function createVerificationId(now = new Date(), uuid = randomUUID()) {
   return `VR-${date}-${uuid}`;
 }
 
+function getTagLogState(tagId) {
+  if (!tagId) return "missing";
+  return /^FUR-\d{6}$/.test(tagId) ? "valid" : "invalid";
+}
+
 function supabaseHeaders(supabaseSecretKey, extras = {}) {
   return {
     apikey: supabaseSecretKey,
@@ -69,7 +74,7 @@ export default async function handler(req, res) {
   const requestId = randomUUID();
   const startedAt = Date.now();
   const method = (req.method || "GET").toUpperCase();
-  let loggedTagId = null;
+  let tagState = "missing";
 
   res.setHeader?.("Cache-Control", "no-store");
   res.setHeader?.("X-Request-ID", requestId);
@@ -81,7 +86,7 @@ export default async function handler(req, res) {
         method,
         statusCode: res.statusCode,
         durationMs: Date.now() - startedAt,
-        tagId: loggedTagId
+        tagState
       })
     );
   });
@@ -111,7 +116,7 @@ export default async function handler(req, res) {
   const rawTagId = req.query?.tagId;
   const tagId =
     typeof rawTagId === "string" ? rawTagId.trim().toUpperCase() : rawTagId;
-  loggedTagId = typeof tagId === "string" ? tagId : null;
+  tagState = getTagLogState(tagId);
 
   if (!tagId) {
     return res.status(400).json(
@@ -297,6 +302,7 @@ export {
   buildResponse,
   checkRateLimit,
   createVerificationId,
+  getTagLogState,
   resetRateLimits,
   supabaseHeaders
 };
