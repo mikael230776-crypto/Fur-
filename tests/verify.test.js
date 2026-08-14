@@ -78,17 +78,36 @@ test('returns 500 ERROR when Supabase configuration is missing', async () => {
   assert.equal(res.payload.message, 'Supabase environment variables are missing');
 });
 
-test('returns VERIFIED registry data for a known tag', async () => {
-  configureSupabase();
-  globalThis.fetch = async () => ({
+globalThis.fetch = async (endpoint, options = {}) => {
+  if (endpoint.includes('/rest/v1/Products')) {
+    return {
+      ok: true,
+      json: async () => [{
+        tag_id: 'FUR-000001',
+        product: 'Organic Cotton Tote Bag',
+        brand: 'Example Brand Ltd',
+        status: 'VERIFIED'
+      }]
+    };
+  }
+
+  if (options.method === 'POST') {
+    const record = JSON.parse(options.body);
+
+    return {
+      ok: true,
+      json: async () => [{
+        ...record,
+        created_at: '2026-08-14T10:00:00.000Z'
+      }]
+    };
+  }
+
+  return {
     ok: true,
-    json: async () => [{
-      tag_id: 'FUR-000001',
-      product: 'Organic Cotton Tote Bag',
-      brand: 'Example Brand Ltd',
-      status: 'VERIFIED'
-    }]
-  });
+    json: async () => []
+  };
+};
   const res = createRes();
 
   await handler({ query: { tagId: 'FUR-000001' } }, res);
@@ -98,7 +117,10 @@ test('returns VERIFIED registry data for a known tag', async () => {
   assert.equal(res.payload.tagId, 'FUR-000001');
   assert.equal(res.payload.product, 'Organic Cotton Tote Bag');
   assert.equal(res.payload.brand, 'Example Brand Ltd');
-  assert.match(res.payload.verificationId, /^VR-\d{8}-\d{6}-000001$/);
+  assert.match(
+  res.payload.verificationId,
+  /^VR-\d{8}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+);
   assert.doesNotThrow(() => new Date(res.payload.verifiedAt));
 });
 
