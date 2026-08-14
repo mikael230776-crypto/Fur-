@@ -1,97 +1,78 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>FUR Verification Result</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #fff;
-      color: #111;
-      text-align: center;
-      padding: 80px 20px;
-    }
-    h1 {
-      font-size: 36px;
-      margin-bottom: 10px;
-    }
-    .status {
-      font-size: 22px;
-      font-weight: bold;
-      margin-bottom: 20px;
-    }
-    .verified {
-      color: green;
-    }
-    .not-verified {
-      color: red;
-    }
-    .box {
-      max-width: 500px;
-      margin: 30px auto;
-      padding: 24px;
-      border: 1px solid #ccc;
-      text-align: left;
-    }
-    .row {
-      margin-bottom: 12px;
-    }
-    .label {
-      font-weight: bold;
-    }
-  </style>
-</head>
-<body>
+# FUR Verification
 
-  <h1>FUR Verification Result</h1>
-  <div id="status" class="status">Checking...</div>
+FUR is developing a professional product verification service. Phase 1 uses NFC-linked product identifiers to let a customer check whether a product record is recognised and currently verified.
 
-  <div id="result" class="box" style="display:none;">
-    <div class="row"><span class="label">Product ID:</span> <span id="productId"></span></div>
-    <div class="row"><span class="label">Product:</span> <span id="product"></span></div>
-    <div class="row"><span class="label">Brand:</span> <span id="brand"></span></div>
-    <div class="row"><span class="label">Status:</span> <span id="verificationStatus"></span></div>
-  </div>
+## Phase 1
 
-  <script>
-    async function runVerification() {
-      const params = new URLSearchParams(window.location.search);
-      const tagId = params.get("tagId");
+Current Phase 1 flow:
 
-      const statusEl = document.getElementById("status");
-      const resultEl = document.getElementById("result");
+1. An NFC tag directs the customer to the FUR verification page with a tag ID.
+2. The public page sends the tag ID to the verification API.
+3. The API validates and normalises the tag ID.
+4. The API checks the FUR product registry in Supabase.
+5. A verified product returns its product, brand and verification status.
+6. The service creates or reuses a persistent verification record for the verified tag.
 
-      if (!tagId) {
-        statusEl.textContent = "Missing Tag ID";
-        statusEl.className = "status not-verified";
-        return;
-      }
+Phase 1 is NFC-only. Later development can extend the system with additional physical authentication technology.
 
-      try {
-        const response = await fetch(`/api/verify?tagId=${encodeURIComponent(tagId)}`);
-        const data = await response.json();
+## Tag format
 
-        if (response.ok && data.status === "VERIFIED") {
-          statusEl.textContent = "✔ VERIFIED";
-          statusEl.className = "status verified";
+Valid product tag IDs use this format:
 
-          document.getElementById("productId").textContent = tagId;
-          document.getElementById("product").textContent = data.product || "-";
-          document.getElementById("brand").textContent = data.brand || "-";
-          document.getElementById("verificationStatus").textContent = data.status || "-";
+```text
+FUR-000001
+```
 
-          resultEl.style.display = "block";
-        } else {
-          statusEl.textContent = "✘ NOT VERIFIED";
-          statusEl.className = "status not-verified";
-        }
-      } catch (error) {
-        statusEl.textContent = "Verification error";
-        statusEl.className = "status not-verified";
-      }
-    }
+The API trims surrounding spaces and converts letters to uppercase before checking the tag.
 
-    runVerification();
-  </script>
+## Verification API
 
-</body>
-</html> 
+Endpoint:
+
+```text
+GET /api/verify?tagId=FUR-000001
+```
+
+Main response states include:
+
+- `VERIFIED` — the registry contains a currently verified product.
+- `NOT_VERIFIED` — the product is not recognised or is not currently verified.
+- `ERROR` — the verification service could not complete the request.
+
+The API stores successful verification records in Supabase so verified scans have a persistent audit record.
+
+## Current protections
+
+The public verification endpoint currently includes:
+
+- GET-only method protection.
+- Tag ID format validation.
+- Per-client request rate limiting.
+- No-cache response headers.
+- Request IDs and structured request logging.
+- Clear separation between an unknown product and a service failure.
+
+## Data and secrets
+
+Supabase connection details are supplied through environment variables:
+
+```text
+SUPABASE_URL
+SUPABASE_SECRET_KEY
+```
+
+Secret keys must never be committed to this repository or exposed in client-side code.
+
+## Tests
+
+Run the automated test suite with:
+
+```bash
+npm test
+```
+
+The test suite covers the verification API behaviour, including valid and invalid tags, persistence, service failures and request protection.
+
+## Development approach
+
+Changes should be developed on a separate branch and reviewed through a pull request before they reach `main`. The working verification service on `main` should remain stable while new functionality is developed.
