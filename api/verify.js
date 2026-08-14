@@ -61,6 +61,10 @@ function getTagLogState(tagId) {
   return /^FUR-\d{6}$/.test(tagId) ? "valid" : "invalid";
 }
 
+function scanHistoryEnabled() {
+  return process.env.ENABLE_SCAN_HISTORY === "true";
+}
+
 function supabaseHeaders(supabaseSecretKey, extras = {}) {
   return {
     apikey: supabaseSecretKey,
@@ -68,6 +72,34 @@ function supabaseHeaders(supabaseSecretKey, extras = {}) {
     Accept: "application/json",
     ...extras
   };
+}
+
+async function saveVerificationScan(
+  supabaseUrl,
+  supabaseSecretKey,
+  { tagId, requestId, resultStatus }
+) {
+  const endpoint = `${supabaseUrl}/rest/v1/verification_scans`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: supabaseHeaders(supabaseSecretKey, {
+      "Content-Type": "application/json",
+      Prefer: "return=minimal"
+    }),
+    body: JSON.stringify({
+      tag_id: tagId,
+      request_id: requestId,
+      result_status: resultStatus
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Supabase scan history insert failed:", response.status, errorText);
+    return false;
+  }
+
+  return true;
 }
 
 export default async function handler(req, res) {
@@ -145,6 +177,15 @@ export default async function handler(req, res) {
     );
   }
 
+  async function recordScan(resultStatus) {
+    if (!scanHistoryEnabled()) return true;
+    return saveVerificationScan(supabaseUrl, supabaseSecretKey, {
+      tagId,
+      requestId,
+      resultStatus
+    });
+  }
+
   try {
     const productEndpoint =
       `${supabaseUrl}/rest/v1/Products` +
@@ -170,6 +211,14 @@ export default async function handler(req, res) {
     const product = rows[0];
 
     if (!product) {
+      if (!(await recordScan("NOT_VERIFIED"))) {
+        return res.status(502).json(
+          buildResponse("ERROR", {
+            message: "Scan history could not be saved"
+          })
+        );
+      }
+
       return res.status(404).json(
         buildResponse("NOT_VERIFIED", {
           tagId,
@@ -179,8 +228,17 @@ export default async function handler(req, res) {
     }
 
     if (product.status !== "VERIFIED") {
+      const resultStatus = product.status || "NOT_VERIFIED";
+      if (!(await recordScan(resultStatus))) {
+        return res.status(502).json(
+          buildResponse("ERROR", {
+            message: "Scan history could not be saved"
+          })
+        );
+      }
+
       return res.status(200).json(
-        buildResponse(product.status || "NOT_VERIFIED", {
+        buildResponse(resultStatus, {
           tagId: product.tag_id,
           product: product.product,
           brand: product.brand,
@@ -279,6 +337,14 @@ export default async function handler(req, res) {
       }
     }
 
+    if (!(await recordScan("VERIFIED"))) {
+      return res.status(502).json(
+        buildResponse("ERROR", {
+          message: "Scan history could not be saved"
+        })
+      );
+    }
+
     return res.status(200).json(
       buildResponse("VERIFIED", {
         tagId: savedRecord.tag_id,
@@ -304,5 +370,7 @@ export {
   createVerificationId,
   getTagLogState,
   resetRateLimits,
+  saveVerificationScan,
+  scanHistoryEnabled,
   supabaseHeaders
 };
