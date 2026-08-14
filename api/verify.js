@@ -51,11 +51,9 @@ function buildResponse(status, extras = {}) {
   };
 }
 
-function createVerificationId(tagId, now = new Date()) {
+function createVerificationId(now = new Date(), uuid = randomUUID()) {
   const date = now.toISOString().slice(0, 10).replaceAll("-", "");
-  const time = now.toISOString().slice(11, 19).replaceAll(":", "");
-  const tagSuffix = tagId.replace(/[^0-9]/g, "").slice(-6).padStart(6, "0");
-  return `VR-${date}-${time}-${tagSuffix}`;
+  return `VR-${date}-${uuid}`;
 }
 
 function supabaseHeaders(supabaseSecretKey, extras = {}) {
@@ -216,7 +214,7 @@ export default async function handler(req, res) {
 
     if (!savedRecord) {
       const verificationRecord = {
-        verification_id: createVerificationId(product.tag_id),
+        verification_id: createVerificationId(),
         tag_id: product.tag_id,
         status: product.status,
         product: product.product,
