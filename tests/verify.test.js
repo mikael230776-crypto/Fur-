@@ -76,9 +76,10 @@ test('returns 500 ERROR when Supabase configuration is missing', async () => {
   assert.equal(res.statusCode, 500);
   assert.equal(res.payload.status, 'ERROR');
   assert.equal(res.payload.message, 'Supabase environment variables are missing');
-});
+}); test('returns VERIFIED registry data for a known tag', async () => {
+  configureSupabase();
 
-globalThis.fetch = async (endpoint, options = {}) => {
+  globalThis.fetch = async (endpoint, options = {}) => {
   if (endpoint.includes('/rest/v1/Products')) {
     return {
       ok: true,
