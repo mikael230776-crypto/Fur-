@@ -109,7 +109,7 @@ async function getRecentVerificationScans(
 async function saveVerificationScan(
   supabaseUrl,
   supabaseSecretKey,
-  { tagId, requestId, resultStatus }
+  { tagId, requestId, resultStatus, securityFlag = null }
 ) {
   const endpoint = `${supabaseUrl}/rest/v1/verification_scans`;
   const response = await fetch(endpoint, {
@@ -121,7 +121,8 @@ async function saveVerificationScan(
     body: JSON.stringify({
       tag_id: tagId,
       request_id: requestId,
-      result_status: resultStatus
+      result_status: resultStatus,
+security_flag: securityFlag
     })
   });
 
