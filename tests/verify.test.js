@@ -448,6 +448,7 @@ test('VERIFIED product with repeated scans raises security warning', async () =>
 
   const warnings = [];
   const originalWarn = console.warn;
+  let savedScanBody;
 
   console.warn = (message) => {
     warnings.push(message);
@@ -500,6 +501,8 @@ test('VERIFIED product with repeated scans raises security warning', async () =>
       endpoint.includes('/rest/v1/verification_scans') &&
       options.method === 'POST'
     ) {
+      savedScanBody = JSON.parse(options.body);
+
       return {
         ok: true,
         json: async () => []
@@ -518,6 +521,7 @@ test('VERIFIED product with repeated scans raises security warning', async () =>
 
   console.warn = originalWarn;
 
+  assert.equal(savedScanBody.security_flag, 'REPEATED_SCAN');
   assert.equal(res.statusCode, 200);
   assert.equal(
     warnings.includes('VERIFIED product has repeated scan history'),
