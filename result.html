@@ -202,9 +202,15 @@
           verificationMeta.hidden = false;
           message.textContent = 'This product has been independently verified and recorded in the FUR Verification Registry.';
         } else {
-          status.textContent = '✕ NOT VERIFIED';
+          status.textContent =
+            data.status === 'SUSPENDED' ? '✕ SUSPENDED' :
+            data.status === 'REPLACED' ? '✕ REPLACED' :
+            '✕ NOT VERIFIED';
+
           status.className = 'status not-verified';
-          message.textContent = 'This Tag ID could not be confirmed against the FUR Verification Registry.';
+
+          message.textContent =
+            data.message || 'This Tag ID could not be confirmed against the FUR Verification Registry.';
         }
       } catch (error) {
         status.textContent = 'VERIFICATION ERROR';
