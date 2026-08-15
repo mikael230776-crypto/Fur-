@@ -140,7 +140,10 @@ async function saveVerificationScan(
 
 
 
-
+export default async function handler(req, res) {
+  const requestId = randomUUID();
+  const startedAt = Date.now();
+  const method = (req.method || "GET").toUpperCase();
 
 
 
