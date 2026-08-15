@@ -413,3 +413,32 @@ test('flags repeated NFC scans as suspicious', async () => {
 
   assert.equal(warningTriggered, true);
 });
+test('replaced NFC tag is refused verification', async () => {
+  configureSupabase();
+
+  globalThis.fetch = async (endpoint) => {
+    if (endpoint.includes('/rest/v1/products')) {
+      return {
+        ok: true,
+        json: async () => [{
+          tag_id: 'FUR-000001',
+          product: 'Organic Cotton Tote Bag',
+          brand: 'Example Brand Ltd',
+          status: 'REPLACED'
+        }]
+      };
+    }
+
+    return {
+      ok: true,
+      json: async () => []
+    };
+  };
+
+  const res = createRes();
+
+  await handler({ query: { tagId: 'FUR-000001' } }, res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.payload.status, 'REPLACED');
+});
