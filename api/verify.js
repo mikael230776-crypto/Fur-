@@ -122,12 +122,7 @@ async function saveVerificationScan(
       tag_id: tagId,
       request_id: requestId,
       result_status: resultStatus,
-security_flag: securityFlag
-    })
-  });
 
-  if (!response.ok) {
-    const errorText = await response.text();
     console.error("Supabase scan history insert failed:", response.status, errorText);
     return false;
   }
@@ -225,19 +220,21 @@ let repeatedScanDetected = false;
     console.warn("Suspicious repeated NFC tag scans detected");
   }
 
-  return saveVerificationScan(supabaseUrl, supabaseSecretKey, {
-    tagId,
-    requestId,
-    resultStatus
-  });
+   return saveVerificationScan(supabaseUrl, supabaseSecretKey, {
+  tagId,
+  requestId,
+  resultStatus,
+  securityFlag: repeatedScanDetected ? "REPEATED_SCAN" : null
+});
+      `
 }
-  try {
-    const productEndpoint =
-      `${supabaseUrl}/rest/v1/Products` +
-      `?tag_id=eq.${encodeURIComponent(tagId)}` +
-      `&select=tag_id,product,brand,status` +
-      `&limit=1`;
 
+try {
+  const productEndpoint =
+    `${supabaseUrl}/rest/v1/Products` +
+    `?tag_id=eq.${encodeURIComponent(tagId)}` +
+    `&select=tag_id,product,brand,status` +
+    `&limit=1`;
     const productResponse = await fetch(productEndpoint, {
       headers: supabaseHeaders(supabaseSecretKey)
     });
