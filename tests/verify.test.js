@@ -359,6 +359,19 @@ test('flags repeated NFC scans as suspicious', async () => {
         }]
       };
     }
+    if (endpoint.includes('/rest/v1/verification_records')) {
+  return {
+    ok: true,
+    json: async () => [{
+      verification_id: 'VR-TEST-000001',
+      tag_id: 'FUR-000001',
+      created_at: '2026-08-15T10:00:00.000Z',
+      status: 'VERIFIED',
+      product: 'Organic Cotton Tote Bag',
+      brand: 'Example Brand Ltd'
+    }]
+  };
+}
 
     if (
       endpoint.includes('/rest/v1/verification_scans') &&
