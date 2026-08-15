@@ -280,7 +280,7 @@ export default async function handler(req, res) {
         );
       }
 
-      return res.status(200).json(
+      return res.status(403).json(
         buildResponse(resultStatus, {
           tagId: product.tag_id,
           product: product.product,
