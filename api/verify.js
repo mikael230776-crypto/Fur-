@@ -210,14 +210,25 @@ export default async function handler(req, res) {
   }
 
   async function recordScan(resultStatus) {
-    if (!scanHistoryEnabled()) return true;
-    return saveVerificationScan(supabaseUrl, supabaseSecretKey, {
-      tagId,
-      requestId,
-      resultStatus
-    });
+  if (!scanHistoryEnabled()) return true;
+
+  const recentScans = await getRecentVerificationScans(
+    supabaseUrl,
+    supabaseSecretKey,
+    tagId
+  );
+
+  if (Array.isArray(recentScans) &&
+      recentScans.length >= REPEATED_SCAN_THRESHOLD) {
+    console.warn("Suspicious repeated NFC tag scans detected");
   }
 
+  return saveVerificationScan(supabaseUrl, supabaseSecretKey, {
+    tagId,
+    requestId,
+    resultStatus
+  });
+}
   try {
     const productEndpoint =
       `${supabaseUrl}/rest/v1/Products` +
