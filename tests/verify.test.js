@@ -1,6 +1,45 @@
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import handler from '../api/verify.js';
+const originalFetch = globalThis.fetch;
+const originalSupabaseUrl = process.env.SUPABASE_URL;
+const originalSupabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
+
+function createRes() {
+  return {
+    statusCode: 200,
+    payload: null,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.payload = body;
+      return this;
+    }
+  };
+}
+
+function configureSupabase() {
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_SECRET_KEY = 'test-secret-key';
+}
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+
+  if (originalSupabaseUrl === undefined) {
+    delete process.env.SUPABASE_URL;
+  } else {
+    process.env.SUPABASE_URL = originalSupabaseUrl;
+  }
+
+  if (originalSupabaseSecretKey === undefined) {
+    delete process.env.SUPABASE_SECRET_KEY;
+  } else {
+    process.env.SUPABASE_SECRET_KEY = originalSupabaseSecretKey;
+  }
+});
 
  
   
