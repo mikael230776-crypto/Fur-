@@ -112,6 +112,7 @@ async function saveVerificationScan(
   { tagId, requestId, resultStatus, securityFlag = null }
 ) {
   const endpoint = `${supabaseUrl}/rest/v1/verification_scans`;
+
   const response = await fetch(endpoint, {
     method: "POST",
     headers: supabaseHeaders(supabaseSecretKey, {
@@ -122,7 +123,12 @@ async function saveVerificationScan(
       tag_id: tagId,
       request_id: requestId,
       result_status: resultStatus,
+      security_flag: securityFlag
+    })
+  });
 
+  if (!response.ok) {
+    const errorText = await response.text();
     console.error("Supabase scan history insert failed:", response.status, errorText);
     return false;
   }
@@ -130,10 +136,15 @@ async function saveVerificationScan(
   return true;
 }
 
-export default async function handler(req, res) {
-  const requestId = randomUUID();
-  const startedAt = Date.now();
-  const method = (req.method || "GET").toUpperCase();
+
+
+
+
+
+
+
+
+  
   let tagState = "missing";
 
   res.setHeader?.("Cache-Control", "no-store");
