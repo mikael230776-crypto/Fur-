@@ -280,7 +280,7 @@ export default async function handler(req, res) {
         );
       }
 
-      const responseStatus = resultStatus === "SUSPENDED" ? 403 : 200;
+      const responseStatus = ["SUSPENDED", "REPLACED"].includes(resultStatus) ? 403 : 200;
 
 return res.status(responseStatus).json(
         buildResponse(resultStatus, {
