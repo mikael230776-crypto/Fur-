@@ -174,7 +174,7 @@
         const response = await fetch('/api/verify?tagId=' + encodeURIComponent(tagId));
         const data = await response.json();
 
-        if (!response.ok && response.status !== 404) {
+        if (!response.ok && ![403, 404].includes(response.status)) {
           throw new Error('Verification service error');
         }
 
