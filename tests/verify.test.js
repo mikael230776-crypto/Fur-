@@ -1,4 +1,32 @@
-import test, { afterEach } from 'node:test';
+test('suspended NFC tag is refused verification', async () => {
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_SECRET_KEY = 'test-secret';
+
+  globalThis.fetch = async (endpoint) => {
+    if (endpoint.includes('/rest/v1/products')) {
+      return {
+        ok: true,
+        json: async () => [{
+          tag_id: 'FUR-000001',
+          product: 'Organic Cotton Tote Bag',
+          brand: 'Example Brand Ltd',
+          status: 'SUSPENDED'
+        }]
+      };
+    }
+
+    return {
+      ok: true,
+      json: async () => []
+    };
+  };
+
+  const res = createRes();
+
+  await handler({ query: { tagId: 'FUR-000001' } }, res);
+
+  assert.notEqual(res.statusCode, 200);
+});import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import handler from '../api/verify.js';
 
@@ -280,7 +308,7 @@ test('suspended NFC tag is refused verification', async () => {
   process.env.SUPABASE_SECRET_KEY = 'test-secret';
 
   globalThis.fetch = async (endpoint) => {
-    if (endpoint.includes('/rest/v1/products')) {
+    if (endpoint.includes('/rest/v1/Products')) {
       return {
         ok: true,
         json: async () => [{
