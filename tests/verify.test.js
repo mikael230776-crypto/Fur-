@@ -336,3 +336,67 @@ test('replaced NFC tag is refused verification', async () => {
 
   assert.notEqual(res.statusCode, 200);
 });
+test('flags repeated NFC scans as suspicious', async () => {
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_SECRET_KEY = 'test-secret';
+  process.env.ENABLE_SCAN_HISTORY = 'true';
+
+  let warningTriggered = false;
+  const originalWarn = console.warn;
+  console.warn = () => {
+    warningTriggered = true;
+  };
+
+  globalThis.fetch = async (endpoint, options = {}) => {
+    if (endpoint.includes('/rest/v1/Products')) {
+      return {
+        ok: true,
+        json: async () => [{
+          tag_id: 'FUR-000001',
+          product: 'Organic Cotton Tote Bag',
+          brand: 'Example Brand Ltd',
+          status: 'VERIFIED'
+        }]
+      };
+    }
+
+    if (
+      endpoint.includes('/rest/v1/verification_scans') &&
+      options.method !== 'POST'
+    ) {
+      return {
+        ok: true,
+        json: async () => [
+          { tag_id: 'FUR-000001' },
+          { tag_id: 'FUR-000001' },
+          { tag_id: 'FUR-000001' },
+          { tag_id: 'FUR-000001' },
+          { tag_id: 'FUR-000001' }
+        ]
+      };
+    }
+
+    if (
+      endpoint.includes('/rest/v1/verification_scans') &&
+      options.method === 'POST'
+    ) {
+      return {
+        ok: true,
+        json: async () => []
+      };
+    }
+
+    return {
+      ok: true,
+      json: async () => []
+    };
+  };
+
+  const res = createRes();
+
+  await handler({ query: { tagId: 'FUR-000001' } }, res);
+
+  console.warn = originalWarn;
+
+  assert.equal(warningTriggered, true);
+});
