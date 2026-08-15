@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
+const REPEATED_SCAN_WINDOW_MS = 60_000;
+const REPEATED_SCAN_THRESHOLD = 5;
 const rateLimitStore =
   globalThis.__furVerificationRateLimits ??
   (globalThis.__furVerificationRateLimits = new Map());
@@ -73,7 +75,37 @@ function supabaseHeaders(supabaseSecretKey, extras = {}) {
     ...extras
   };
 }
+async function getRecentVerificationScans(
+  supabaseUrl,
+  supabaseSecretKey,
+  tagId,
+  now = Date.now()
+) {
+  const since = new Date(now - REPEATED_SCAN_WINDOW_MS).toISOString();
 
+  const endpoint =
+    `${supabaseUrl}/rest/v1/verification_scans` +
+    `?tag_id=eq.${encodeURIComponent(tagId)}` +
+    `&scanned_at=gte.${encodeURIComponent(since)}` +
+    `&select=tag_id,scanned_at` +
+    `&order=scanned_at.desc`;
+
+  const response = await fetch(endpoint, {
+    headers: supabaseHeaders(supabaseSecretKey)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(
+      "Supabase scan history lookup failed:",
+      response.status,
+      errorText
+    );
+    return null;
+  }
+
+  return response.json();
+}
 async function saveVerificationScan(
   supabaseUrl,
   supabaseSecretKey,
