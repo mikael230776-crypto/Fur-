@@ -208,7 +208,7 @@ export default async function handler(req, res) {
       })
     );
   }
-
+let repeatedScanDetected = false;
   async function recordScan(resultStatus) {
   if (!scanHistoryEnabled()) return true;
 
@@ -220,6 +220,7 @@ export default async function handler(req, res) {
 
   if (Array.isArray(recentScans) &&
       recentScans.length >= REPEATED_SCAN_THRESHOLD) {
+   repeatedScanDetected = true;
     console.warn("Suspicious repeated NFC tag scans detected");
   }
 
@@ -388,7 +389,9 @@ return res.status(responseStatus).json(
           message: "Scan history could not be saved"
         })
       );
-    }
+    }if (repeatedScanDetected) {
+  console.warn("VERIFIED product has repeated scan history");
+}
 
     return res.status(200).json(
       buildResponse("VERIFIED", {
