@@ -417,7 +417,7 @@ test('replaced NFC tag is refused verification', async () => {
   configureSupabase();
 
   globalThis.fetch = async (endpoint) => {
-    if (endpoint.includes('/rest/v1/products')) {
+    if (endpoint.includes('/rest/v1/Products')) {
       return {
         ok: true,
         json: async () => [{
