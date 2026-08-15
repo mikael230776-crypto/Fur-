@@ -202,3 +202,76 @@ test('returns 500 ERROR when the registry connection throws', async () => {
     message: 'Verification service is temporarily unavailable'
   });
 });
+test('checks recent scan history for repeated use of the same tag', async () => {
+  configureSupabase();
+  process.env.ENABLE_SCAN_HISTORY = 'true';
+
+  let historyChecked = false;
+
+  globalThis.fetch = async (endpoint, options = {}) => {
+    if (
+      endpoint.includes('/rest/v1/verification_scans') &&
+      (!options.method || options.method === 'GET')
+    ) {
+      historyChecked = true;
+
+      return {
+        ok: true,
+        json: async () => [
+          { tag_id: 'FUR-000001' },
+          { tag_id: 'FUR-000001' },
+          { tag_id: 'FUR-000001' },
+          { tag_id: 'FUR-000001' },
+          { tag_id: 'FUR-000001' }
+        ]
+      };
+    }
+
+    if (endpoint.includes('/rest/v1/Products')) {
+      return {
+        ok: true,
+        json: async () => [{
+          tag_id: 'FUR-000001',
+          product: 'Organic Cotton Tote Bag',
+          brand: 'Example Brand Ltd',
+          status: 'VERIFIED'
+        }]
+      };
+    }
+
+    if (endpoint.includes('/rest/v1/verification_records')) {
+      return {
+        ok: true,
+        json: async () => [{
+          verification_id: 'VR-20260815-00000000-0000-0000-0000-000000000001',
+          tag_id: 'FUR-000001',
+          created_at: '2026-08-15T07:30:00.000Z',
+          status: 'VERIFIED',
+          product: 'Organic Cotton Tote Bag',
+          brand: 'Example Brand Ltd'
+        }]
+      };
+    }
+
+    if (
+      endpoint.includes('/rest/v1/verification_scans') &&
+      options.method === 'POST'
+    ) {
+      return {
+        ok: true,
+        json: async () => []
+      };
+    }
+
+    return {
+      ok: true,
+      json: async () => []
+    };
+  };
+
+  const res = createRes();
+
+  await handler({ query: { tagId: 'FUR-000001' } }, res);
+
+  assert.equal(historyChecked, true);
+});
