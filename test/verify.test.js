@@ -370,7 +370,8 @@ test("saves privacy-safe NFC scan history", async () => {
   assert.deepEqual(JSON.parse(calls[0].options.body), {
     tag_id: "FUR-000001",
     request_id: "2b9a81ee-3c1f-4f3c-9b74-a1551a54d3ce",
-    result_status: "VERIFIED"
+    result_status: "VERIFIED",
+security_flag: null
   });
   assert.equal(JSON.stringify(calls[0]).includes("203.0.113"), false);
 });
