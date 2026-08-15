@@ -240,7 +240,7 @@ let repeatedScanDetected = false;
   resultStatus,
   securityFlag: repeatedScanDetected ? "REPEATED_SCAN" : null
 });
-      `
+      
 }
 
 try {
