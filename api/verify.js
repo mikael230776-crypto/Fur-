@@ -280,7 +280,9 @@ export default async function handler(req, res) {
         );
       }
 
-      return res.status(403).json(
+      const responseStatus = resultStatus === "SUSPENDED" ? 403 : 200;
+
+return res.status(responseStatus).json(
         buildResponse(resultStatus, {
           tagId: product.tag_id,
           product: product.product,
