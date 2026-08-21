@@ -83,6 +83,16 @@ test('returns 500 ERROR when Supabase configuration is missing', async () => {
   configureSupabase();
 
   globalThis.fetch = async (endpoint, options = {}) => {
+    if (endpoint.includes('/rest/v1/nfc_tags')) {
+  return {
+    ok: true,
+    json: async () => [{
+      tag_id: 'FUR-000001',
+      tag_uid: '04-46-17-DA-29-1D-90',
+      status: 'ACTIVE'
+    }]
+  };
+}
   if (endpoint.includes('/rest/v1/Products')) {
     return {
       ok: true,
@@ -134,8 +144,19 @@ test('normalises a lowercase tagId before querying the registry', async () => {
 
   globalThis.fetch = async (endpoint) => {
     requestedEndpoint = endpoint;
-    return {
-      ok: true,
+    
+      if (endpoint.includes('/rest/v1/nfc_tags')) {
+  return {
+    ok: true,
+    json: async () => [{
+      tag_id: 'FUR-000001',
+      tag_uid: '04-46-17-DA-29-1D-90',
+      status: 'ACTIVE'
+    }]
+  };
+}
+     return{
+       ok: true,
       json: async () => [{
         tag_id: 'FUR-000001',
         product: 'Organic Cotton Tote Bag',
@@ -156,10 +177,23 @@ test('normalises a lowercase tagId before querying the registry', async () => {
 
 test('returns 404 NOT_VERIFIED when the registry has no matching tag', async () => {
   configureSupabase();
-  globalThis.fetch = async () => ({
+globalThis.fetch = async (endpoint) => {
+  if (endpoint.includes('/rest/v1/nfc_tags')) {
+    return {
+      ok: true,
+      json: async () => [{
+        tag_id: 'FUR-999999',
+        tag_uid: 'TEST-UID-999999',
+        status: 'ACTIVE'
+      }]
+    };
+  }
+
+  return {
     ok: true,
     json: async () => []
-  });
+  };
+};
   const res = createRes();
 
   await handler({ query: { tagId: 'FUR-999999' } }, res);
@@ -174,11 +208,24 @@ test('returns 404 NOT_VERIFIED when the registry has no matching tag', async () 
 
 test('returns 502 ERROR when the registry request fails', async () => {
   configureSupabase();
-  globalThis.fetch = async () => ({
+  globalThis.fetch = async (endpoint) => {
+  if (endpoint.includes('/rest/v1/nfc_tags')) {
+    return {
+      ok: true,
+      json: async () => [{
+        tag_id: 'FUR-000001',
+        tag_uid: '04-46-17-DA-29-1D-90',
+        status: 'ACTIVE'
+      }]
+    };
+  }
+
+  return {
     ok: false,
     status: 500,
     text: async () => 'upstream failure'
-  });
+  };
+};
   const res = createRes();
 
   await handler({ query: { tagId: 'FUR-000001' } }, res);
@@ -212,6 +259,16 @@ test('checks recent scan history for repeated use of the same tag', async () => 
   let historyChecked = false;
 
   globalThis.fetch = async (endpoint, options = {}) => {
+   if (endpoint.includes('/rest/v1/nfc_tags')) {
+  return {
+    ok: true,
+    json: async () => [{
+      tag_id: 'FUR-000001',
+      tag_uid: '04-46-17-DA-29-1D-90',
+      status: 'ACTIVE'
+    }]
+  };
+}
     if (
       endpoint.includes('/rest/v1/verification_scans') &&
       (!options.method || options.method === 'GET')
@@ -283,6 +340,16 @@ test('suspended NFC tag is refused verification', async () => {
   process.env.SUPABASE_SECRET_KEY = 'test-secret';
 
   globalThis.fetch = async (endpoint) => {
+    if (endpoint.includes('/rest/v1/nfc_tags')) {
+  return {
+    ok: true,
+    json: async () => [{
+      tag_id: 'FUR-000001',
+      tag_uid: '04-46-17-DA-29-1D-90',
+      status: 'SUSPENDED'
+    }]
+  };
+}
     if (endpoint.includes('/rest/v1/Products')) {
       return {
         ok: true,
@@ -312,7 +379,18 @@ test('replaced NFC tag is refused verification', async () => {
   process.env.SUPABASE_SECRET_KEY = 'test-secret';
 
   globalThis.fetch = async (endpoint) => {
+    if (endpoint.includes('/rest/v1/nfc_tags')) {
+  return {
+    ok: true,
+    json: async () => [{
+      tag_id: 'FUR-000001',
+      tag_uid: '04-46-17-DA-29-1D-90',
+      status: 'ACTIVE'
+    }]
+  };
+}
     if (endpoint.includes('/rest/v1/Products')) {
+    
       return {
         ok: true,
         json: async () => [{
@@ -343,11 +421,21 @@ test('flags repeated NFC scans as suspicious', async () => {
 
   let warningTriggered = false;
   const originalWarn = console.warn;
-  console.warn = () => {
+  console.warn = () => {f
     warningTriggered = true;
   };
 
   globalThis.fetch = async (endpoint, options = {}) => {
+    if (endpoint.includes('/rest/v1/nfc_tags')) {
+  return {
+    ok: true,
+    json: async () => [{
+      tag_id: 'FUR-000001',
+      tag_uid: '04-46-17-DA-29-1D-90',
+      status: 'ACTIVE'
+    }]
+  };
+}
     if (endpoint.includes('/rest/v1/Products')) {
       return {
         ok: true,
@@ -417,6 +505,17 @@ test('replaced NFC tag is refused verification', async () => {
   configureSupabase();
 
   globalThis.fetch = async (endpoint) => {
+
+      if (endpoint.includes('/rest/v1/nfc_tags')) {
+  return {
+    ok: true,
+    json: async () => [{
+      tag_id: 'FUR-000001',
+      tag_uid: '04-46-17-DA-29-1D-90',
+      status: 'ACTIVE'
+    }]
+  };
+}
     if (endpoint.includes('/rest/v1/Products')) {
       return {
         ok: true,
@@ -455,6 +554,16 @@ test('VERIFIED product with repeated scans raises security warning', async () =>
   };
 
   globalThis.fetch = async (endpoint, options = {}) => {
+    if (endpoint.includes('/rest/v1/nfc_tags')) {
+  return {
+    ok: true,
+    json: async () => [{
+      tag_id: 'FUR-000001',
+      tag_uid: '04-46-17-DA-29-1D-90',
+      status: 'ACTIVE'
+    }]
+  };
+}
     if (endpoint.includes('/rest/v1/Products')) {
       return {
         ok: true,
