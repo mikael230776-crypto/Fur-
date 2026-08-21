@@ -421,7 +421,7 @@ test('flags repeated NFC scans as suspicious', async () => {
 
   let warningTriggered = false;
   const originalWarn = console.warn;
-  console.warn = () => {f
+  console.warn = () => {
     warningTriggered = true;
   };
 
