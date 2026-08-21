@@ -432,7 +432,7 @@ test('flags repeated NFC scans as suspicious', async () => {
     json: async () => [{
       tag_id: 'FUR-000001',
       tag_uid: '04-46-17-DA-29-1D-90',
-      status: 'REPLACED
+      status: 'REPLACED'
     }]
   };
 }
