@@ -244,6 +244,51 @@ let repeatedScanDetected = false;
 }
 
 try {
+   const nfcTagEndpoint =
+    `${supabaseUrl}/rest/v1/nfc_tags` +
+    `?tag_id=eq.${encodeURIComponent(tagId)}` +
+    `&select=tag_id,tag_uid,status` +
+    `&limit=1`;
+
+  const nfcTagResponse = await fetch(nfcTagEndpoint, {
+    headers: supabaseHeaders(supabaseSecretKey)
+  });
+
+  if (!nfcTagResponse.ok) {
+    const errorText = await nfcTagResponse.text();
+    console.error(
+      "NFC tag registry lookup failed:",
+      nfcTagResponse.status,
+      errorText
+    );
+
+    return res.status(502).json(
+      buildResponse("ERROR", {
+        message: "NFC tag registry lookup failed"
+      })
+    );
+  }
+
+  const nfcTags = await nfcTagResponse.json();
+  const nfcTag = nfcTags[0];
+
+  if (!nfcTag) {
+    return res.status(404).json(
+      buildResponse("NOT_VERIFIED", {
+        tagId,
+        message: "NFC tag is not registered"
+      })
+    );
+  }
+
+  if (nfcTag.status !== "ACTIVE") {
+    return res.status(403).json(
+      buildResponse("NOT_VERIFIED", {
+        tagId,
+        message: "NFC tag is not active"
+      })
+    );
+  }
   const productEndpoint =
     `${supabaseUrl}/rest/v1/Products` +
     `?tag_id=eq.${encodeURIComponent(tagId)}` +
