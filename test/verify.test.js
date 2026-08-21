@@ -32,6 +32,14 @@ function response({ ok = true, status = 200, json = [], text = "" } = {}) {
   };
 }
 
+function activeNfcTag() {
+  return {
+    tag_id: "FUR-000001",
+    tag_uid: "04-46-17-DA-29-1D-90",
+    status: "ACTIVE"
+  };
+}
+
 function verifiedProduct() {
   return {
     tag_id: "FUR-000001",
@@ -55,10 +63,13 @@ test("persists and returns verification record", async () => {
   global.fetch = async (url, options = {}) => {
     calls.push({ url, options });
 
-    if (calls.length === 1) {
+    if (url.includes("/rest/v1/nfc_tags")) {
+      return response({ json: [activeNfcTag()] });
+    }
+    if (url.includes("/rest/v1/Products")) {
       return response({ json: [verifiedProduct()] });
     }
-    if (calls.length === 2) {
+    if (!options.method && url.includes("/rest/v1/verification_records")) {
       return response({ json: [] });
     }
 
@@ -76,10 +87,10 @@ test("persists and returns verification record", async () => {
     /^VR-\d{8}-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   );
   assert.equal(res.body.verifiedAt, createdAt);
-  assert.equal(calls[2].options.method, "POST");
-  assert.match(calls[1].url, /verification_records/);
-  assert.match(calls[1].url, /created_at/);
-  assert.equal(JSON.parse(calls[2].options.body).created_at, undefined);
+  assert.equal(calls[3].options.method, "POST");
+  assert.match(calls[2].url, /verification_records/);
+  assert.match(calls[2].url, /created_at/);
+  assert.equal(JSON.parse(calls[3].options.body).created_at, undefined);
 });
 
 test("reuses the stored record on repeated verification", async () => {
@@ -96,6 +107,9 @@ test("reuses the stored record on repeated verification", async () => {
   let insertCount = 0;
 
   global.fetch = async (url, options = {}) => {
+    if (url.includes("/rest/v1/nfc_tags")) {
+      return response({ json: [activeNfcTag()] });
+    }
     if (url.includes("/rest/v1/Products")) {
       return response({ json: [verifiedProduct()] });
     }
@@ -137,6 +151,9 @@ test("reuses the winning record after a concurrent insert conflict", async () =>
   let insertCount = 0;
 
   global.fetch = async (url, options = {}) => {
+    if (url.includes("/rest/v1/nfc_tags")) {
+      return response({ json: [activeNfcTag()] });
+    }
     if (url.includes("/rest/v1/Products")) {
       return response({ json: [verifiedProduct()] });
     }
@@ -166,8 +183,11 @@ test("does not insert for unverified product", async () => {
   configureSupabase();
   let calls = 0;
 
-  global.fetch = async () => {
+  global.fetch = async (url) => {
     calls += 1;
+    if (url.includes("/rest/v1/nfc_tags")) {
+      return response({ json: [activeNfcTag()] });
+    }
     return response({
       json: [{ ...verifiedProduct(), status: "PENDING" }]
     });
@@ -178,17 +198,24 @@ test("does not insert for unverified product", async () => {
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.status, "PENDING");
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
 });
 
 test("returns 502 when verification record insert fails", async () => {
   configureSupabase();
   let calls = 0;
 
-  global.fetch = async () => {
+  global.fetch = async (url) => {
     calls += 1;
-    if (calls === 1) return response({ json: [verifiedProduct()] });
-    if (calls === 2) return response({ json: [] });
+    if (url.includes("/rest/v1/nfc_tags")) {
+      return response({ json: [activeNfcTag()] });
+    }
+    if (url.includes("/rest/v1/Products")) {
+      return response({ json: [verifiedProduct()] });
+    }
+    if (url.includes("/rest/v1/verification_records") && calls === 3) {
+      return response({ json: [] });
+    }
     return response({ ok: false, status: 500, text: "insert failed" });
   };
 
