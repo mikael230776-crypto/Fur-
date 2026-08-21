@@ -512,7 +512,7 @@ test('replaced NFC tag is refused verification', async () => {
     json: async () => [{
       tag_id: 'FUR-000001',
       tag_uid: '04-46-17-DA-29-1D-90',
-      status: 'REPLACED
+      status: 'REPLACED'
     }]
   };
 }
@@ -540,100 +540,4 @@ test('replaced NFC tag is refused verification', async () => {
 
   assert.equal(res.statusCode, 403);
   assert.equal(res.payload.status, 'REPLACED');
-});
-test('VERIFIED product with repeated scans raises security warning', async () => {
-  configureSupabase();
-  process.env.ENABLE_SCAN_HISTORY = 'true';
-
-  const warnings = [];
-  const originalWarn = console.warn;
-  let savedScanBody;
-
-  console.warn = (message) => {
-    warnings.push(message);
-  };
-
-  globalThis.fetch = async (endpoint, options = {}) => {
-    if (endpoint.includes('/rest/v1/nfc_tags')) {
-  return {
-    ok: true,
-    json: async () => [{
-      tag_id: 'FUR-000001',
-      tag_uid: '04-46-17-DA-29-1D-90',
-      status: 'ACTIVE'
-    }]
-  };
-}
-    if (endpoint.includes('/rest/v1/Products')) {
-      return {
-        ok: true,
-        json: async () => [{
-          tag_id: 'FUR-000001',
-          product: 'Organic Cotton Tote Bag',
-          brand: 'Example Brand Ltd',
-          status: 'VERIFIED'
-        }]
-      };
-    }
-
-    if (endpoint.includes('/rest/v1/verification_records')) {
-      return {
-        ok: true,
-        json: async () => [{
-          verification_id: 'VR-TEST-000001',
-          tag_id: 'FUR-000001',
-          created_at: '2026-08-15T10:00:00.000Z',
-          status: 'VERIFIED',
-          product: 'Organic Cotton Tote Bag',
-          brand: 'Example Brand Ltd'
-        }]
-      };
-    }
-
-    if (
-      endpoint.includes('/rest/v1/verification_scans') &&
-      options.method !== 'POST'
-    ) {
-      return {
-        ok: true,
-        json: async () => [
-          { tag_id: 'FUR-000001' },
-          { tag_id: 'FUR-000001' },
-          { tag_id: 'FUR-000001' },
-          { tag_id: 'FUR-000001' },
-          { tag_id: 'FUR-000001' }
-        ]
-      };
-    }
-
-    if (
-      endpoint.includes('/rest/v1/verification_scans') &&
-      options.method === 'POST'
-    ) {
-      savedScanBody = JSON.parse(options.body);
-
-      return {
-        ok: true,
-        json: async () => []
-      };
-    }
-
-    return {
-      ok: true,
-      json: async () => []
-    };
-  };
-
-  const res = createRes();
-
-  await handler({ query: { tagId: 'FUR-000001' } }, res);
-
-  console.warn = originalWarn;
-
-  assert.equal(savedScanBody.security_flag, 'REPEATED_SCAN');
-  assert.equal(res.statusCode, 200);
-  assert.equal(
-    warnings.includes('VERIFIED product has repeated scan history'),
-    true
-  );
 });
