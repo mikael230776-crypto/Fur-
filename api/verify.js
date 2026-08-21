@@ -282,8 +282,12 @@ try {
   }
 
   if (nfcTag.status !== "ACTIVE") {
+    const resultStatus = ["SUSPENDED", "REPLACED"].includes(nfcTag.status)
+      ? nfcTag.status
+      : "NOT_VERIFIED";
+
     return res.status(403).json(
-      buildResponse("NOT_VERIFIED", {
+      buildResponse(resultStatus, {
         tagId,
         message: "NFC tag is not active"
       })
