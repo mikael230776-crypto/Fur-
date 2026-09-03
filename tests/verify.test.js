@@ -420,6 +420,7 @@ test('flags repeated NFC scans as suspicious', async () => {
   process.env.ENABLE_SCAN_HISTORY = 'true';
 
   let warningTriggered = false;
+  let savedSecurityFlag;
   const originalWarn = console.warn;
   console.warn = () => {
     warningTriggered = true;
@@ -481,6 +482,8 @@ test('flags repeated NFC scans as suspicious', async () => {
       endpoint.includes('/rest/v1/verification_scans') &&
       options.method === 'POST'
     ) {
+      savedSecurityFlag = JSON.parse(options.body).security_flag;
+
       return {
         ok: true,
         json: async () => []
@@ -500,6 +503,7 @@ test('flags repeated NFC scans as suspicious', async () => {
   console.warn = originalWarn;
 
   assert.equal(warningTriggered, true);
+  assert.equal(savedSecurityFlag, 'REPEATED_SCAN');
 });
 test('replaced NFC tag is refused verification', async () => {
   configureSupabase();
