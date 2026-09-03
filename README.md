@@ -51,6 +51,9 @@ The public verification endpoint currently includes:
 - No-cache response headers.
 - Request IDs and structured request logging.
 - Clear separation between an unknown product and a service failure.
+- Optional NTAG 424 DNA SUN authentication using an AES-128 SDM file-read key.
+- Constant-time comparison of the received and calculated SUN MAC.
+- Binding of the authenticated NFC UID to the UID stored in the FUR Registry.
 
 ## Data and secrets
 
@@ -60,6 +63,20 @@ Supabase connection details are supplied through environment variables:
 SUPABASE_URL
 SUPABASE_SECRET_KEY
 ```
+
+Scan history and SUN validation are enabled independently:
+
+```text
+ENABLE_SCAN_HISTORY=true
+ENABLE_SUN_VALIDATION=true
+SUN_SDM_FILE_READ_KEY=<32 hexadecimal characters>
+```
+
+When SUN validation is enabled, the tag URL must provide `uid`, `ctr` and
+`cmac` alongside `tagId`. `SUN_SDM_FILE_READ_KEY` is a server-only AES-128 key
+and must match the key used when provisioning the NTAG 424 DNA tag. The current
+MAC calculation is for the FUR SDM profile where the MAC input is empty; do not
+enable it for a differently configured tag profile.
 
 Secret keys must never be committed to this repository or exposed in client-side code.
 
