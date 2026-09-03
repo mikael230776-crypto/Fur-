@@ -234,12 +234,14 @@ let repeatedScanDetected = false;
     console.warn("Suspicious repeated NFC tag scans detected");
   }
 
-   return saveVerificationScan(supabaseUrl, supabaseSecretKey, {
-  tagId,
-  requestId,
-  resultStatus,
-  securityFlag: repeatedScanDetected ? "REPEATED_SCAN" : null
-});
+  const securityFlag = repeatedScanDetected ? "REPEATED_SCAN" : null;
+
+  return saveVerificationScan(supabaseUrl, supabaseSecretKey, {
+    tagId,
+    requestId,
+    resultStatus,
+    securityFlag
+  });
       
 }
 
