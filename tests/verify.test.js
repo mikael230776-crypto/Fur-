@@ -79,7 +79,33 @@ test('returns 500 ERROR when Supabase configuration is missing', async () => {
   assert.equal(res.statusCode, 500);
   assert.equal(res.payload.status, 'ERROR');
   assert.equal(res.payload.message, 'Supabase environment variables are missing');
-}); test('returns VERIFIED registry data for a known tag', async () => {
+}); test('returns 404 NOT_VERIFIED when the NFC tag is not registered', async () => {
+  configureSupabase();
+
+  globalThis.fetch = async (endpoint) => {
+    if (endpoint.includes('/rest/v1/nfc_tags')) {
+      return {
+        ok: true,
+        json: async () => []
+      };
+    }
+
+    throw new Error(`Unexpected endpoint: ${endpoint}`);
+  };
+
+  const res = createRes();
+
+  await handler({ query: { tagId: 'FUR-999999' } }, res);
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.payload, {
+    status: 'NOT_VERIFIED',
+    tagId: 'FUR-999999',
+    message: 'NFC tag is not registered'
+  });
+});
+
+test('returns VERIFIED registry data for a known tag', async () => {
   configureSupabase();
 
   globalThis.fetch = async (endpoint, options = {}) => {
