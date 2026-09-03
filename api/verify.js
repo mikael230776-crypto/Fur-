@@ -333,23 +333,6 @@ try {
       errorText
     );
 
-    if (sunValidationEnabled()) {
-  const registeredUid =
-    typeof nfcTag.tag_uid === "string"
-      ? nfcTag.tag_uid.replace(/[^0-9a-f]/gi, "").toUpperCase()
-      : "";
-  const authenticatedUid = req.query.uid.toUpperCase();
-
-  if (!registeredUid || registeredUid !== authenticatedUid) {
-    return res.status(403).json(
-      buildResponse("NOT_VERIFIED", {
-        tagId,
-        message: "Authenticated UID does not match the registered NFC tag"
-      })
-    );
-  }
-}
-
     return res.status(502).json(
       buildResponse("ERROR", {
         message: "NFC tag registry lookup failed"
@@ -367,6 +350,23 @@ try {
         message: "NFC tag is not registered"
       })
     );
+  }
+
+  if (sunValidationEnabled()) {
+    const registeredUid =
+      typeof nfcTag.tag_uid === "string"
+        ? nfcTag.tag_uid.replace(/[^0-9a-f]/gi, "").toUpperCase()
+        : "";
+    const authenticatedUid = req.query.uid.toUpperCase();
+
+    if (!registeredUid || registeredUid !== authenticatedUid) {
+      return res.status(403).json(
+        buildResponse("NOT_VERIFIED", {
+          tagId,
+          message: "Authenticated UID does not match the registered NFC tag"
+        })
+      );
+    }
   }
 
   if (nfcTag.status !== "ACTIVE") {
