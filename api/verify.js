@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { aesCmac, hexToBuffer, secureEqual, truncateSdmMac } from "./sun-crypto.js";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
@@ -74,6 +75,30 @@ function supabaseHeaders(supabaseSecretKey, extras = {}) {
     Accept: "application/json",
     ...extras
   };
+}
+
+function validateSunMac(uidHex, counterHex, macHex, keyHex) {
+  const key = hexToBuffer(keyHex, 16);
+  const uid = hexToBuffer(uidHex, 7);
+  const counter = hexToBuffer(counterHex, 3);
+  const receivedMac = hexToBuffer(macHex, 8);
+
+  const sessionVector = Buffer.concat([
+    Buffer.from("3cc300010080", "hex"),
+    uid,
+    counter
+  ]);
+
+  const sessionKey = aesCmac(key, sessionVector);
+  const expectedMac = truncateSdmMac(
+    aesCmac(sessionKey, Buffer.alloc(0))
+  );
+
+  return secureEqual(expectedMac, receivedMac);
+}
+
+function sunValidationEnabled() {
+  return process.env.ENABLE_SUN_VALIDATION === "true";
 }
 async function getRecentVerificationScans(
   supabaseUrl,
@@ -210,6 +235,7 @@ export default async function handler(req, res) {
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
+  const sunSdmFileReadKey = process.env.SUN_SDM_FILE_READ_KEY;
 
   if (!supabaseUrl || !supabaseSecretKey) {
     return res.status(500).json(
@@ -218,6 +244,49 @@ export default async function handler(req, res) {
       })
     );
   }
+
+  if (sunValidationEnabled() && !sunSdmFileReadKey) {
+  return res.status(500).json(
+    buildResponse("ERROR", {
+      message: "SUN validation key is missing"
+    })
+  );
+}
+
+  if (sunValidationEnabled()) {
+  const uid = req.query?.uid;
+  const counter = req.query?.ctr;
+  const mac = req.query?.cmac;
+
+  if (
+    typeof uid !== "string" ||
+    typeof counter !== "string" ||
+    typeof mac !== "string"
+  ) {
+    return res.status(400).json(
+      buildResponse("ERROR", {
+        message: "Missing SUN authentication data"
+      })
+    );
+  }
+
+  try {
+    if (!validateSunMac(uid, counter, mac, sunSdmFileReadKey)) {
+      return res.status(403).json(
+        buildResponse("NOT_VERIFIED", {
+          tagId,
+          message: "SUN authentication failed"
+        })
+      );
+    }
+  } catch {
+    return res.status(400).json(
+      buildResponse("ERROR", {
+        message: "Invalid SUN authentication data"
+      })
+    );
+  }
+}
 let repeatedScanDetected = false;
   async function recordScan(resultStatus) {
   if (!scanHistoryEnabled()) return true;
@@ -263,6 +332,23 @@ try {
       nfcTagResponse.status,
       errorText
     );
+
+    if (sunValidationEnabled()) {
+  const registeredUid =
+    typeof nfcTag.tag_uid === "string"
+      ? nfcTag.tag_uid.replace(/[^0-9a-f]/gi, "").toUpperCase()
+      : "";
+  const authenticatedUid = req.query.uid.toUpperCase();
+
+  if (!registeredUid || registeredUid !== authenticatedUid) {
+    return res.status(403).json(
+      buildResponse("NOT_VERIFIED", {
+        tagId,
+        message: "Authenticated UID does not match the registered NFC tag"
+      })
+    );
+  }
+}
 
     return res.status(502).json(
       buildResponse("ERROR", {
