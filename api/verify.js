@@ -229,7 +229,7 @@ let repeatedScanDetected = false;
   );
 
   if (Array.isArray(recentScans) &&
-      recentScans.length >= REPEATED_SCAN_THRESHOLD) {
+      recentScans.length + 1 >= REPEATED_SCAN_THRESHOLD) {
    repeatedScanDetected = true;
     console.warn("Suspicious repeated NFC tag scans detected");
   }
