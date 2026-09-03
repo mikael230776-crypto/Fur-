@@ -440,7 +440,7 @@ test('replaced NFC tag is refused verification', async () => {
 
   assert.notEqual(res.statusCode, 200);
 });
-test('flags repeated NFC scans as suspicious', async () => {
+test('flags the fifth NFC scan as suspicious', async () => {
   process.env.SUPABASE_URL = 'https://example.supabase.co';
   process.env.SUPABASE_SECRET_KEY = 'test-secret';
   process.env.ENABLE_SCAN_HISTORY = 'true';
@@ -495,7 +495,6 @@ test('flags repeated NFC scans as suspicious', async () => {
       return {
         ok: true,
         json: async () => [
-          { tag_id: 'FUR-000001' },
           { tag_id: 'FUR-000001' },
           { tag_id: 'FUR-000001' },
           { tag_id: 'FUR-000001' },
