@@ -2,6 +2,7 @@
 """One-time, expiring execution release stored without exposing its secret."""
 
 from dataclasses import dataclass
+import fcntl
 import hashlib
 import hmac
 import json
@@ -64,37 +65,42 @@ def arm_release(path, expected_uid, manifest_sha256, ttl_seconds=600, now=None):
 
 def consume_release(path, expected_uid, manifest_sha256, now=None):
     path = Path(path)
-    state = json.loads(path.read_text(encoding="utf-8"))
-    required = {
-        "schema", "expected_uid", "manifest_sha256", "token_sha256",
-        "expires_at", "consumed",
-    }
-    if set(state) != required or state["schema"] != SCHEMA:
-        raise RuntimeError("Execution release schema is invalid")
-    if state["expected_uid"] != expected_uid.upper():
-        raise RuntimeError("Execution release UID mismatch")
-    if state["manifest_sha256"] != manifest_sha256.lower():
-        raise RuntimeError("Execution release manifest mismatch")
-    if state["consumed"] is not False:
-        raise RuntimeError("Execution release has already been consumed")
-    now = time.time() if now is None else now
-    if now > state["expires_at"]:
-        raise RuntimeError("Execution release has expired")
-    account = _account()
-    token = subprocess.check_output(
-        [
-            "security", "find-generic-password", "-a", account,
-            "-s", KEYCHAIN_SERVICE, "-w",
-        ],
-        text=True,
-        stderr=subprocess.DEVNULL,
-    ).strip()
-    if not hmac.compare_digest(
-        hashlib.sha256(token.encode()).hexdigest(), state["token_sha256"]
-    ):
-        raise RuntimeError("Execution release secret is invalid")
-    state["consumed"] = True
-    _save(path, state)
+    lock_path = path.with_name(path.name + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        os.chmod(lock_path, 0o600)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        state = json.loads(path.read_text(encoding="utf-8"))
+        required = {
+            "schema", "expected_uid", "manifest_sha256", "token_sha256",
+            "expires_at", "consumed",
+        }
+        if set(state) != required or state["schema"] != SCHEMA:
+            raise RuntimeError("Execution release schema is invalid")
+        if state["expected_uid"] != expected_uid.upper():
+            raise RuntimeError("Execution release UID mismatch")
+        if state["manifest_sha256"] != manifest_sha256.lower():
+            raise RuntimeError("Execution release manifest mismatch")
+        if state["consumed"] is not False:
+            raise RuntimeError("Execution release has already been consumed")
+        now = time.time() if now is None else now
+        if now > state["expires_at"]:
+            raise RuntimeError("Execution release has expired")
+        account = _account()
+        token = subprocess.check_output(
+            [
+                "security", "find-generic-password", "-a", account,
+                "-s", KEYCHAIN_SERVICE, "-w",
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        if not hmac.compare_digest(
+            hashlib.sha256(token.encode()).hexdigest(), state["token_sha256"]
+        ):
+            raise RuntimeError("Execution release secret is invalid")
+        state["consumed"] = True
+        _save(path, state)
     subprocess.run(
         [
             "security", "delete-generic-password", "-a", account,
