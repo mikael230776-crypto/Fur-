@@ -69,6 +69,30 @@ def read_full_ndef_file(connection):
     return len(message).to_bytes(2, "big") + message
 
 
+def classify_recovery_state(completed, pending):
+    through_keys = [
+        "preflight_verified", "key_1_changed_verified",
+        "key_2_changed_verified", "key_3_changed_verified",
+        "key_4_changed_verified",
+    ]
+    if completed == through_keys and pending == "ndef_readback_verified":
+        return "ndef"
+    if (
+        completed == through_keys + ["ndef_readback_verified"]
+        and pending == "sdm_settings_readback_verified"
+    ):
+        return "sdm_readback"
+    raise RuntimeError("Unsupported recovery state")
+
+
+def read_sdm_settings_plain(connection):
+    # ChangeFileSettings used an authenticated EV2 session. Reselecting the
+    # application ends that session so GetFileSettings can be issued in its
+    # documented plain form with Le=00.
+    select_ndef_application(connection)
+    return get_file_settings(connection)
+
+
 def execute_live(tag_id, expected_uid, journal_path, authority, release=None):
     # This must remain the first operation: no keychain or reader access before it.
     require_release_present(authority, release, expected_uid)
@@ -123,7 +147,11 @@ def execute_live(tag_id, expected_uid, journal_path, authority, release=None):
         restored.ti, restored.session_enc_key, restored.session_mac_key
     )
     coordinator.apply_and_verify_sdm(
-        connection, lambda: get_file_settings(connection), authority
+        connection, lambda: read_sdm_settings_plain(connection), authority
+    )
+    restored = authenticate_ev2_first_with_key(connection, 0, FACTORY_KEY_0)
+    coordinator.session = LiveSession(
+        restored.ti, restored.session_enc_key, restored.session_mac_key
     )
     coordinator.replace_key_zero(connection, keys[0], authority)
     dynamic_ndef = read_full_ndef_file(connection)
@@ -142,13 +170,14 @@ def recover_live(tag_id, expected_uid, journal_path, authority, release=None):
         journal_path, tag_id, expected_uid, manifest["manifest_sha256"]
     )
     completed = [entry["name"] for entry in journal.state["checkpoints"]]
-    required = [
-        "preflight_verified", "key_1_changed_verified",
-        "key_2_changed_verified", "key_3_changed_verified",
-        "key_4_changed_verified",
-    ]
-    if completed != required or journal.state["pending"] != "ndef_readback_verified":
-        raise RuntimeError(f"Unsupported recovery state: {journal.recovery_action}")
+    try:
+        recovery_stage = classify_recovery_state(
+            completed, journal.state["pending"]
+        )
+    except RuntimeError as error:
+        raise RuntimeError(
+            f"Unsupported recovery state: {journal.recovery_action}"
+        ) from error
 
     reader = find_picc_reader()
     connection = reader.createConnection()
@@ -160,8 +189,13 @@ def recover_live(tag_id, expected_uid, journal_path, authority, release=None):
     version = get_version(connection)
     validate_version(version, uid)
     settings = get_file_settings(connection)
-    if settings != EXPECTED_FACTORY_FILE_SETTINGS:
-        raise RuntimeError("Recovery requires unchanged factory NDEF settings")
+    expected_settings = (
+        EXPECTED_FACTORY_FILE_SETTINGS
+        if recovery_stage == "ndef"
+        else EXPECTED_LIVE_FILE_SETTINGS
+    )
+    if settings != expected_settings:
+        raise RuntimeError("Recovery file settings do not match the journal state")
     authenticated = authenticate_ev2_first_with_key(connection, 0, FACTORY_KEY_0)
     coordinator = LiveProvisioningCoordinator(
         journal,
@@ -172,19 +206,29 @@ def recover_live(tag_id, expected_uid, journal_path, authority, release=None):
         ),
     )
 
-    from ntag424_live_provision import write_ndef_verified, verify_ndef_readback
-    write_ndef_verified(connection, coordinator.session, plan.ndef_file, authority)
-    ndef_readback = read_full_ndef_file(connection)
-    verify_ndef_readback(plan.ndef_file, ndef_readback)
-    journal.confirm("ndef_readback_verified", ndef_readback)
+    if recovery_stage == "ndef":
+        from ntag424_live_provision import write_ndef_verified, verify_ndef_readback
+        write_ndef_verified(connection, coordinator.session, plan.ndef_file, authority)
+        ndef_readback = read_full_ndef_file(connection)
+        verify_ndef_readback(plan.ndef_file, ndef_readback)
+        journal.confirm("ndef_readback_verified", ndef_readback)
 
-    select_ndef_application(connection)
+        select_ndef_application(connection)
+        restored = authenticate_ev2_first_with_key(connection, 0, FACTORY_KEY_0)
+        coordinator.session = LiveSession(
+            restored.ti, restored.session_enc_key, restored.session_mac_key
+        )
+        coordinator.apply_and_verify_sdm(
+            connection, lambda: read_sdm_settings_plain(connection), authority
+        )
+    else:
+        from ntag424_live_provision import verify_sdm_settings_readback
+        verify_sdm_settings_readback(settings)
+        journal.confirm("sdm_settings_readback_verified", settings)
+
     restored = authenticate_ev2_first_with_key(connection, 0, FACTORY_KEY_0)
     coordinator.session = LiveSession(
         restored.ti, restored.session_enc_key, restored.session_mac_key
-    )
-    coordinator.apply_and_verify_sdm(
-        connection, lambda: get_file_settings(connection), authority
     )
     coordinator.replace_key_zero(connection, keys[0], authority)
     dynamic_ndef = read_full_ndef_file(connection)
