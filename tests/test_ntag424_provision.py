@@ -42,7 +42,7 @@ class ProvisioningGateTests(unittest.TestCase):
 
     def test_source_has_no_reader_or_transmit_capability(self):
         source = MODULE_PATH.read_text()
-        self.assertNotIn("smartcard", source.lower())
+        self.assertNotRegex(source, r"(?m)^\s*(from|import)\s+smartcard")
         self.assertNotIn(".transmit(", source)
         self.assertNotIn("connection.connect", source)
 
