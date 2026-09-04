@@ -16,7 +16,7 @@ from ntag424_auth_key_validate import (
 )
 from ntag424_ev2_validate import protect_command
 from ntag424_provision import EXPECTED_SETTINGS
-from ntag424_live_preflight import authenticate_ev2_first_with_key
+from ntag424_live_preflight import FACTORY_KEY_0, authenticate_ev2_first_with_key
 from ntag424_simulate_provision import verify_sun
 from ntag424_recovery_journal import PersistentRecoveryJournal
 from ntag424_write_validate import build_write_data_apdu, verify_protected_response
@@ -169,9 +169,14 @@ class LiveProvisioningCoordinator:
         replace_other_key_verified(
             connection, self.session, key_number, old_key, new_key, authority
         )
+        verified = authenticate_ev2_first_with_key(connection, key_number, new_key)
+        restored = authenticate_ev2_first_with_key(connection, 0, FACTORY_KEY_0)
+        self.session = LiveSession(
+            restored.ti, restored.session_enc_key, restored.session_mac_key
+        )
         self.journal.confirm(
             checkpoint,
-            bytes([key_number, self.session.command_counter]),
+            bytes([key_number]) + verified.ti,
         )
 
     def write_and_verify_ndef(
@@ -179,12 +184,16 @@ class LiveProvisioningCoordinator:
     ) -> None:
         self.journal.begin("ndef_readback_verified")
         write_ndef_verified(connection, self.session, ndef_file, authority)
+        if callable(readback):
+            readback = readback()
         verify_ndef_readback(ndef_file, readback)
         self.journal.confirm("ndef_readback_verified", readback)
 
     def apply_and_verify_sdm(self, connection, readback, authority) -> None:
         self.journal.begin("sdm_settings_readback_verified")
         apply_sdm_settings_verified(connection, self.session, authority)
+        if callable(readback):
+            readback = readback()
         verify_sdm_settings_readback(readback)
         self.journal.confirm("sdm_settings_readback_verified", readback)
 
