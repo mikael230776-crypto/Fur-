@@ -223,7 +223,8 @@ class LiveProvisioningCoordinator:
     def complete(
         self, connection, admin_key, sdm_key, uid, counter, mac
     ) -> LiveSession:
-        self.journal.begin("production_auth_and_sun_verified")
+        if self.journal.state["pending"] is None:
+            self.journal.begin("production_auth_and_sun_verified")
         production_session = verify_production_completion(
             connection, self.session, admin_key, sdm_key, uid, counter, mac
         )
