@@ -65,13 +65,23 @@ class LiveProvisionReleaseCandidateTests(unittest.TestCase):
             MODULE.write_ndef_verified(None, session, b"short", MODULE.AUTHORISATION_PHRASE)
         payload = bytes(107)
         class Connection:
+            def __init__(self):
+                self.apdus = []
+
             def transmit(self, apdu):
-                self.apdu = bytes(apdu)
+                self.apdus.append(bytes(apdu))
                 return [], 0x90, 0x00
         connection = Connection()
         MODULE.write_ndef_verified(connection, session, payload, MODULE.AUTHORISATION_PHRASE)
-        self.assertEqual(connection.apdu[:5], bytes.fromhex("00D600006B"))
-        self.assertEqual(connection.apdu[5:], payload)
+        self.assertEqual(
+            connection.apdus[:2],
+            [
+                bytes.fromhex("00A4040C07D2760000850101"),
+                bytes.fromhex("00A4000C02E104"),
+            ],
+        )
+        self.assertEqual(connection.apdus[2][:5], bytes.fromhex("00D600006B"))
+        self.assertEqual(connection.apdus[2][5:], payload)
         self.assertEqual(session.command_counter, 0)
 
     def test_ndef_plain_write_requires_iso_success_status(self):
@@ -83,6 +93,26 @@ class LiveProvisionReleaseCandidateTests(unittest.TestCase):
             MODULE.write_ndef_verified(
                 Connection(), session, bytes(107), MODULE.AUTHORISATION_PHRASE
             )
+
+    def test_ndef_write_stops_if_iso_file_selection_fails(self):
+        session = MODULE.LiveSession(bytes(4), bytes(16), bytes(16))
+
+        class Connection:
+            def __init__(self):
+                self.calls = 0
+
+            def transmit(self, apdu):
+                self.calls += 1
+                if self.calls == 2:
+                    return [], 0x69, 0x85
+                return [], 0x90, 0x00
+
+        connection = Connection()
+        with self.assertRaisesRegex(RuntimeError, "NDEF file select failed: 6985"):
+            MODULE.write_ndef_verified(
+                connection, session, bytes(107), MODULE.AUTHORISATION_PHRASE
+            )
+        self.assertEqual(connection.calls, 2)
 
     def test_ndef_readback_must_match_byte_for_byte(self):
         payload = bytes(range(107))

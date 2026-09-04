@@ -71,12 +71,22 @@ def write_ndef_verified(connection, session, ndef_file, authority):
     if len(ndef_file) != 107:
         raise ValueError("FUR NDEF payload must contain exactly 107 bytes")
     require_active_session(session)
-    # The factory NDEF file communication mode is Plain. NXP specifies
-    # ISOUpdateBinary as a supported, tearing-protected write for this file.
-    apdu = bytes([0x00, 0xD6, 0x00, 0x00, len(ndef_file)]) + ndef_file
-    data, sw1, sw2 = connection.transmit(list(apdu))
-    if data or (sw1, sw2) != (0x90, 0x00):
-        raise RuntimeError(f"ISO NDEF write failed: {sw1:02X}{sw2:02X}")
+    # ISOUpdateBinary operates on the currently selected ISO file. Select the
+    # NFC Forum NDEF application and its NDEF file explicitly before writing.
+    commands = (
+        ("NDEF application select", bytes.fromhex("00A4040C07D2760000850101")),
+        ("NDEF file select", bytes.fromhex("00A4000C02E104")),
+        (
+            "NDEF write",
+            bytes([0x00, 0xD6, 0x00, 0x00, len(ndef_file)]) + ndef_file,
+        ),
+    )
+    for operation, apdu in commands:
+        data, sw1, sw2 = connection.transmit(list(apdu))
+        if data or (sw1, sw2) != (0x90, 0x00):
+            raise RuntimeError(
+                f"ISO {operation} failed: {sw1:02X}{sw2:02X}"
+            )
 
 
 def verify_ndef_readback(expected, received):
