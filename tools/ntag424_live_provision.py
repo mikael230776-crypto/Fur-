@@ -23,7 +23,14 @@ from ntag424_write_validate import verify_protected_response
 
 LIVE_EXECUTION_ENABLED = False
 AUTHORISATION_PHRASE = "PROVISION FUR TAG PERMANENTLY"
-EXPECTED_LIVE_FILE_SETTINGS = b"\x00" + EXPECTED_SETTINGS + bytes.fromhex("000100")
+# GetFileSettings returns: FileType, FileOption/AccessRights, FileSize,
+# then the optional SDM settings. ChangeFileSettings does not include FileSize.
+EXPECTED_LIVE_FILE_SETTINGS = (
+    b"\x00"
+    + EXPECTED_SETTINGS[:3]
+    + bytes.fromhex("000100")
+    + EXPECTED_SETTINGS[3:]
+)
 
 
 @dataclass

@@ -128,6 +128,10 @@ class LiveProvisionReleaseCandidateTests(unittest.TestCase):
         self.assertEqual(session.command_counter, 1)
 
     def test_sdm_settings_readback_is_exact(self):
+        self.assertEqual(
+            MODULE.EXPECTED_LIVE_FILE_SETTINGS.hex().upper(),
+            "004000E0000100C1F0E13C00004F00005B00005B0000",
+        )
         MODULE.verify_sdm_settings_readback(MODULE.EXPECTED_LIVE_FILE_SETTINGS)
         altered = bytearray(MODULE.EXPECTED_LIVE_FILE_SETTINGS)
         altered[-1] ^= 1
