@@ -88,11 +88,11 @@ def build_plan(tag_id: str) -> Plan:
     offsets = {}
 
     for name, placeholder in PLACEHOLDERS.items():
-        marker = placeholder.encode("ascii")
-        first = ndef_file.find(marker)
-        if first < 0 or ndef_file.find(marker, first + 1) >= 0:
-            raise ValueError(f"{name} placeholder must occur exactly once")
-        offsets[name] = first
+        marker = f"{name}={placeholder}".encode("ascii")
+        field_start = ndef_file.find(marker)
+        if field_start < 0 or ndef_file.find(marker, field_start + 1) >= 0:
+            raise ValueError(f"{name} field must occur exactly once")
+        offsets[name] = field_start + len(name) + 1
 
     return Plan(tag_id=tag_id, url=url, ndef_file=ndef_file, offsets=offsets)
 
