@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Read-only NTAG 424 DNA SUN provisioning planner for FUR.
+"""Offline NTAG 424 DNA SUN provisioning planner for FUR.
 
-This program does not connect to a smartcard reader and contains no write APDUs.
-It validates local prerequisites and calculates the SDM placeholder offsets for
-review before a separate provisioning utility is implemented.
+This program does not connect to a smartcard reader and contains no APDU
+transmission code. It validates local prerequisites, builds the NDEF payload,
+and calculates the exact ChangeFileSettings command data for review.
 """
 
 import argparse
@@ -22,6 +22,16 @@ PLACEHOLDERS = {
     "ctr": "000000",
     "cmac": "0000000000000000",
 }
+
+# FUR SDM profile, per the NTAG 424 DNA data sheet:
+# plain communication + SDM enabled; key 0 controls writes/settings;
+# UID/counter mirrored as ASCII; SUN CMAC uses application key 1.
+FILE_OPTION = bytes.fromhex("40")
+ACCESS_RIGHTS = bytes.fromhex("00E0")
+SDM_OPTIONS = bytes.fromhex("C1")
+SDM_ACCESS_RIGHTS = bytes.fromhex("F0E1")
+NDEF_FILE_CAPACITY = 256
+
 NXP_TEST_KEY = "5ACE7E50AB65D5D51FD5BF5A16B8205B"
 NXP_TEST_SV2 = "3CC30001008004C767F2066180010000"
 NXP_TEST_CMAC = "3A3E8110E05311F7A3FCF0D969BF2B48"
@@ -65,7 +75,7 @@ def build_ndef_uri(url: str) -> bytes:
         raise ValueError("FUR URL must use HTTPS")
 
     encoded_uri = url[len(prefix) :].encode("ascii")
-    payload = b"\x04" + encoded_uri  # NFC Forum URI identifier for https://
+    payload = b"\x04" + encoded_uri
     if len(payload) > 255:
         raise ValueError("URI is too long for a short NDEF record")
 
@@ -97,8 +107,55 @@ def build_plan(tag_id: str) -> Plan:
     return Plan(tag_id=tag_id, url=url, ndef_file=ndef_file, offsets=offsets)
 
 
+def le24_bytes(value: int) -> bytes:
+    if not 0 <= value <= 0xFFFFFF:
+        raise ValueError("SDM offset is outside the 24-bit range")
+    return value.to_bytes(3, "little")
+
+
 def le24(value: int) -> str:
-    return value.to_bytes(3, "little").hex().upper()
+    return le24_bytes(value).hex().upper()
+
+
+def build_change_file_settings_data(plan: Plan) -> bytes:
+    if len(plan.ndef_file) > NDEF_FILE_CAPACITY:
+        raise ValueError("NDEF payload exceeds the 256-byte file capacity")
+
+    ranges = []
+    for name, placeholder in PLACEHOLDERS.items():
+        if name not in plan.offsets:
+            raise ValueError(f"{name} offset is missing")
+        start = plan.offsets[name]
+        end = start + len(placeholder)
+        if start < 0 or end > len(plan.ndef_file):
+            raise ValueError(f"{name} placeholder is outside the NDEF payload")
+        expected = placeholder.encode("ascii")
+        if plan.ndef_file[start:end] != expected:
+            raise ValueError(f"{name} offset does not point to its placeholder")
+        ranges.append((start, end, name))
+
+    ordered = sorted(ranges)
+    for previous, current in zip(ordered, ordered[1:]):
+        if previous[1] > current[0]:
+            raise ValueError(f"{previous[2]} and {current[2]} placeholders overlap")
+
+    cmac_end = plan.offsets["cmac"] + len(PLACEHOLDERS["cmac"])
+    if cmac_end != len(plan.ndef_file):
+        raise ValueError("CMAC placeholder must end at the NDEF payload boundary")
+
+    uid = le24_bytes(plan.offsets["uid"])
+    ctr = le24_bytes(plan.offsets["ctr"])
+    mac = le24_bytes(plan.offsets["cmac"])
+    return (
+        FILE_OPTION
+        + ACCESS_RIGHTS
+        + SDM_OPTIONS
+        + SDM_ACCESS_RIGHTS
+        + uid
+        + ctr
+        + mac
+        + mac
+    )
 
 
 def main() -> int:
@@ -106,7 +163,7 @@ def main() -> int:
     parser.add_argument("--tag-id", default="FUR-000001")
     args = parser.parse_args()
 
-    print("FUR NTAG 424 DNA — READ-ONLY DRY RUN")
+    print("FUR NTAG 424 DNA — OFFLINE DRY RUN")
     print("Reader access: DISABLED")
     print("Tag writes: DISABLED")
 
@@ -122,6 +179,7 @@ def main() -> int:
 
     try:
         plan = build_plan(args.tag_id)
+        settings_data = build_change_file_settings_data(plan)
     except ValueError as error:
         print(f"Plan: INVALID — {error}")
         return 1
@@ -136,7 +194,8 @@ def main() -> int:
         f"MAC input {plan.offsets['cmac']} / {le24(plan.offsets['cmac'])}, "
         f"CMAC {plan.offsets['cmac']} / {le24(plan.offsets['cmac'])}"
     )
-    print("PLAN READY — NO TAG WAS ACCESSED")
+    print(f"FUR ChangeFileSettings data: {settings_data.hex().upper()}")
+    print("PROFILE VALIDATED — NO READER OR TAG WAS ACCESSED")
     return 0
 
 
