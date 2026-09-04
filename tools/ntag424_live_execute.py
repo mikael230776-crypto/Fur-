@@ -10,6 +10,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from ntag424_dry_run import build_plan
 from ntag424_execution_manifest import build_manifest
+from ntag424_execution_release import (
+    ExecutionRelease,
+    arm_release,
+    consume_release,
+)
 from ntag424_inspect import read_ndef
 from ntag424_live_preflight import (
     EXPECTED_FACTORY_FILE_SETTINGS,
@@ -31,17 +36,25 @@ from ntag424_live_provision import (
 from ntag424_recovery_journal import PersistentRecoveryJournal
 from ntag424_simulate_provision import load_production_keys
 
-LIVE_EXECUTION_ENABLED = False
 SUN_PATTERN = re.compile(
     rb"[?&]uid=([0-9A-Fa-f]{14})&ctr=([0-9A-Fa-f]{6})&cmac=([0-9A-Fa-f]{16})"
 )
 
 
-def require_live_authority(authority: str) -> None:
-    if not LIVE_EXECUTION_ENABLED:
+def require_release_present(authority, release, expected_uid):
+    if not isinstance(release, ExecutionRelease):
         raise PermissionError("Live physical execution is hard-locked")
     if authority != AUTHORISATION_PHRASE:
         raise PermissionError("Permanent provisioning authority is missing")
+    if release.expected_uid != expected_uid.upper():
+        raise PermissionError("Execution release is not bound to this tag")
+
+
+def require_manifest_binding(release, manifest_sha256):
+    if (
+        release.manifest_sha256 != manifest_sha256.lower()
+    ):
+        raise PermissionError("Execution release is not bound to this run")
 
 
 def extract_sun_fields(ndef: bytes):
@@ -56,10 +69,11 @@ def read_full_ndef_file(connection):
     return len(message).to_bytes(2, "big") + message
 
 
-def execute_live(tag_id, expected_uid, journal_path, authority):
+def execute_live(tag_id, expected_uid, journal_path, authority, release=None):
     # This must remain the first operation: no keychain or reader access before it.
-    require_live_authority(authority)
+    require_release_present(authority, release, expected_uid)
     manifest = build_manifest(tag_id, expected_uid)
+    require_manifest_binding(release, manifest["manifest_sha256"])
     keys = load_production_keys()
     plan = build_plan(tag_id)
     path = Path(journal_path)
@@ -119,8 +133,6 @@ def execute_live(tag_id, expected_uid, journal_path, authority):
 
 
 def safety_check():
-    if LIVE_EXECUTION_ENABLED:
-        raise RuntimeError("Safety build unexpectedly enables live execution")
     try:
         execute_live(
             "FUR-000001", "044517DA291D90", "/invalid/journal", "NO"
@@ -136,6 +148,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--safety-check", action="store_true")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--arm-release", action="store_true")
     parser.add_argument("--tag-id", default="FUR-000001")
     parser.add_argument("--expected-uid", required=True)
     parser.add_argument(
@@ -143,16 +156,32 @@ def main():
         default=str(Path.home() / "Documents" / "FUR-NTAG-Live-Recovery.json"),
     )
     parser.add_argument("--authority", default="")
+    parser.add_argument(
+        "--release-file",
+        default=str(Path.home() / "Documents" / "FUR-NTAG-One-Time-Release.json"),
+    )
     args = parser.parse_args()
     try:
-        if args.execute:
+        if args.arm_release:
+            manifest = build_manifest(args.tag_id, args.expected_uid)
+            arm_release(
+                args.release_file, args.expected_uid, manifest["manifest_sha256"]
+            )
+            print("ONE-TIME EXECUTION RELEASE ARMED — EXPIRES IN 10 MINUTES")
+            print("Release secret: STORED IN KEYCHAIN — NOT DISPLAYED")
+            print("Reader access: DISABLED — NO TAG WAS ACCESSED")
+        elif args.execute:
+            manifest = build_manifest(args.tag_id, args.expected_uid)
+            release = consume_release(
+                args.release_file, args.expected_uid, manifest["manifest_sha256"]
+            )
             journal = execute_live(
-                args.tag_id, args.expected_uid, args.journal, args.authority
+                args.tag_id, args.expected_uid, args.journal, args.authority, release
             )
             print(f"LIVE PROVISIONING: {journal.recovery_action}")
         else:
             safety_check()
-            print("LIVE EXECUTION WRAPPER READY — PHYSICAL EXECUTION IS HARD-LOCKED")
+            print("LIVE EXECUTION WRAPPER READY — ONE-TIME RELEASE REQUIRED")
             print("Reader access: DISABLED")
             print("Keychain access: DISABLED")
             print("Persistent tag writes: BLOCKED")

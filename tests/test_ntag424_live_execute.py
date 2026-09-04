@@ -10,7 +10,6 @@ SPEC.loader.exec_module(MODULE)
 
 class LiveExecutionWrapperTests(unittest.TestCase):
     def test_live_execution_is_hard_locked(self):
-        self.assertFalse(MODULE.LIVE_EXECUTION_ENABLED)
         with self.assertRaisesRegex(PermissionError, "hard-locked"):
             MODULE.execute_live(
                 "FUR-000001", "044517DA291D90", "/invalid", "NO"
