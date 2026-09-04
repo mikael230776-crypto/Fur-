@@ -86,6 +86,12 @@ class LivePreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "factory key 0"):
             MODULE.authenticate_ev2_first(FakeConnection([]), key_number=1)
 
+    def test_generic_authentication_validates_key_inputs(self):
+        with self.assertRaisesRegex(ValueError, "between 0 and 4"):
+            MODULE.authenticate_ev2_first_with_key(None, 5, bytes(16))
+        with self.assertRaisesRegex(ValueError, "16 bytes"):
+            MODULE.authenticate_ev2_first_with_key(None, 1, bytes(15))
+
     def test_safety_check_does_not_open_reader(self):
         MODULE.safety_check()
 
