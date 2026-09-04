@@ -171,7 +171,13 @@
       }
 
       try {
-        const response = await fetch('/api/verify?tagId=' + encodeURIComponent(tagId));
+        const verificationParams = new URLSearchParams({ tagId });
+        for (const name of ['uid', 'ctr', 'cmac']) {
+          const value = params.get(name);
+          if (value) verificationParams.set(name, value);
+        }
+
+        const response = await fetch('/api/verify?' + verificationParams.toString());
         const data = await response.json();
 
         if (!response.ok && ![400, 403, 404, 429].includes(response.status)) {
