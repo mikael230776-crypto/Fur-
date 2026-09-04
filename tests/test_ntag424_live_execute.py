@@ -73,7 +73,31 @@ class LiveExecutionWrapperTests(unittest.TestCase):
         self.assertEqual(coordinator.session.ti, bytes(4))
         self.assertEqual(journal.evidence, b"\x01" * 5)
 
-    def test_recovery_rejects_any_checkpoint_other_than_pending_ndef(self):
+    def test_recovery_accepts_only_exact_interruption_states(self):
+        through_keys = [
+            "preflight_verified", "key_1_changed_verified",
+            "key_2_changed_verified", "key_3_changed_verified",
+            "key_4_changed_verified",
+        ]
+        self.assertEqual(
+            MODULE.classify_recovery_state(
+                through_keys, "ndef_readback_verified"
+            ),
+            "ndef",
+        )
+        self.assertEqual(
+            MODULE.classify_recovery_state(
+                through_keys + ["ndef_readback_verified"],
+                "sdm_settings_readback_verified",
+            ),
+            "sdm_readback",
+        )
+        with self.assertRaisesRegex(RuntimeError, "Unsupported recovery state"):
+            MODULE.classify_recovery_state(
+                through_keys, "sdm_settings_readback_verified"
+            )
+
+    def test_recovery_rejects_other_checkpoint_states(self):
         original_manifest = MODULE.build_manifest
         original_keys = MODULE.load_production_keys
         original_load = MODULE.PersistentRecoveryJournal.load
