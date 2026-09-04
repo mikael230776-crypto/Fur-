@@ -82,6 +82,15 @@ def classify_recovery_state(completed, pending):
         and pending == "sdm_settings_readback_verified"
     ):
         return "sdm_readback"
+    if (
+        completed == through_keys + [
+            "ndef_readback_verified",
+            "sdm_settings_readback_verified",
+            "key_0_changed",
+        ]
+        and pending == "production_auth_and_sun_verified"
+    ):
+        return "production_verify"
     raise RuntimeError("Unsupported recovery state")
 
 
@@ -196,6 +205,18 @@ def recover_live(tag_id, expected_uid, journal_path, authority, release=None):
     )
     if settings != expected_settings:
         raise RuntimeError("Recovery file settings do not match the journal state")
+    if recovery_stage == "production_verify":
+        # Key 0 is already production-only. Capture the mirrored SUN while the
+        # tag is unauthenticated, then prove the production admin key and SUN.
+        dynamic_ndef = read_full_ndef_file(connection)
+        sun_uid, counter, mac = extract_sun_fields(dynamic_ndef)
+        coordinator = LiveProvisioningCoordinator(
+            journal,
+            LiveSession(bytes(4), bytes(16), bytes(16), active=False),
+        )
+        coordinator.complete(connection, keys[0], keys[1], sun_uid, counter, mac)
+        return journal
+
     authenticated = authenticate_ev2_first_with_key(connection, 0, FACTORY_KEY_0)
     coordinator = LiveProvisioningCoordinator(
         journal,

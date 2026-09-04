@@ -14,6 +14,21 @@ KEYS = {number: bytes([number + 1]) * 16 for number in range(5)}
 
 
 class SimulatedProvisioningTests(unittest.TestCase):
+    def test_sun_verification_converts_mirrored_counter_to_lsb_first(self):
+        uid = "04C767F2066180"
+        mirrored_counter = "000001"
+        key = bytes.fromhex("5ACE7E50AB65D5D51FD5BF5A16B8205B")
+        session_key = MODULE.aes_cmac(
+            key,
+            bytes.fromhex("3CC30001008004C767F2066180010000"),
+        )
+        self.assertEqual(
+            session_key.hex().upper(),
+            "3A3E8110E05311F7A3FCF0D969BF2B48",
+        )
+        mac = MODULE.truncate_mac(MODULE.aes_cmac(session_key, b""))
+        MODULE.verify_sun(uid, mirrored_counter, mac.hex(), key)
+
     def test_complete_sequence(self):
         tag = MODULE.SimulatedTag(uid=bytes.fromhex(UID))
         journal = MODULE.provision_simulated_tag(

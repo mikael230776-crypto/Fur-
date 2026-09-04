@@ -92,6 +92,17 @@ class LiveExecutionWrapperTests(unittest.TestCase):
             ),
             "sdm_readback",
         )
+        self.assertEqual(
+            MODULE.classify_recovery_state(
+                through_keys + [
+                    "ndef_readback_verified",
+                    "sdm_settings_readback_verified",
+                    "key_0_changed",
+                ],
+                "production_auth_and_sun_verified",
+            ),
+            "production_verify",
+        )
         with self.assertRaisesRegex(RuntimeError, "Unsupported recovery state"):
             MODULE.classify_recovery_state(
                 through_keys, "sdm_settings_readback_verified"
