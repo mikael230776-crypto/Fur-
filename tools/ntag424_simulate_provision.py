@@ -97,7 +97,7 @@ class SimulatedTag:
         mac = truncate_mac(aes_cmac(session_mac_key, b""))
         return (
             self.uid.hex().upper(),
-            counter.hex().upper(),
+            counter[::-1].hex().upper(),
             mac.hex().upper(),
         )
 
@@ -160,10 +160,14 @@ def verify_sun(
     sdm_key: bytes,
 ) -> None:
     uid = bytes.fromhex(uid_hex)
-    counter = bytes.fromhex(counter_hex)
+    mirrored_counter = bytes.fromhex(counter_hex)
     received = bytes.fromhex(mac_hex)
-    if len(uid) != 7 or len(counter) != 3 or len(received) != 8:
+    if len(uid) != 7 or len(mirrored_counter) != 3 or len(received) != 8:
         raise ValueError("SUN fields have invalid lengths")
+    # NTAG 424 mirrors the counter as human-readable hexadecimal in MSB-first
+    # display order (for example 000001), while the session-vector counter is
+    # the three-byte LSB-first value defined by AN12196 (010000).
+    counter = mirrored_counter[::-1]
     session_key = aes_cmac(
         sdm_key,
         bytes.fromhex("3CC300010080") + uid + counter,
