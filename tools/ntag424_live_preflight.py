@@ -127,21 +127,23 @@ def validate_version(version: bytes, uid: bytes) -> None:
         raise RuntimeError("Version UID does not match the reader UID")
 
 
-def authenticate_ev2_first(
+def authenticate_ev2_first_with_key(
     connection,
+    key_number: int,
+    static_key: bytes,
     rnd_a: bytes = None,
-    key_number: int = 0,
-    static_key: bytes = FACTORY_KEY_0,
 ) -> PreflightSession:
-    if key_number != 0 or static_key != FACTORY_KEY_0:
-        raise ValueError("Live preflight is locked to factory key 0")
+    if not 0 <= key_number <= 4:
+        raise ValueError("Key number must be between 0 and 4")
+    if len(static_key) != 16:
+        raise ValueError("Static AES key must contain 16 bytes")
     if rnd_a is None:
         rnd_a = secrets.token_bytes(16)
     if len(rnd_a) != 16:
         raise ValueError("RndA must contain 16 bytes")
 
     encrypted_rnd_b = expect_status(
-        transmit(connection, [0x90, 0x71, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00]),
+        transmit(connection, [0x90, 0x71, 0x00, 0x00, 0x02, key_number, 0x00, 0x00]),
         (0x91, 0xAF),
         "AuthenticateEV2First part 1",
     )
@@ -185,6 +187,17 @@ def authenticate_ev2_first(
 
     session_enc_key, session_mac_key = derive_session_keys(static_key, rnd_a, rnd_b)
     return PreflightSession(ti, session_enc_key, session_mac_key)
+
+
+def authenticate_ev2_first(
+    connection,
+    rnd_a: bytes = None,
+    key_number: int = 0,
+    static_key: bytes = FACTORY_KEY_0,
+) -> PreflightSession:
+    if key_number != 0 or static_key != FACTORY_KEY_0:
+        raise ValueError("Live preflight is locked to factory key 0")
+    return authenticate_ev2_first_with_key(connection, key_number, static_key, rnd_a)
 
 
 def find_picc_reader():
