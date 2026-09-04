@@ -132,6 +132,67 @@ def execute_live(tag_id, expected_uid, journal_path, authority, release=None):
     return journal
 
 
+def recover_live(tag_id, expected_uid, journal_path, authority, release=None):
+    require_release_present(authority, release, expected_uid)
+    manifest = build_manifest(tag_id, expected_uid)
+    require_manifest_binding(release, manifest["manifest_sha256"])
+    keys = load_production_keys()
+    plan = build_plan(tag_id)
+    journal = PersistentRecoveryJournal.load(
+        journal_path, tag_id, expected_uid, manifest["manifest_sha256"]
+    )
+    completed = [entry["name"] for entry in journal.state["checkpoints"]]
+    required = [
+        "preflight_verified", "key_1_changed_verified",
+        "key_2_changed_verified", "key_3_changed_verified",
+        "key_4_changed_verified",
+    ]
+    if completed != required or journal.state["pending"] != "ndef_readback_verified":
+        raise RuntimeError(f"Unsupported recovery state: {journal.recovery_action}")
+
+    reader = find_picc_reader()
+    connection = reader.createConnection()
+    connection.connect()
+    uid = read_uid(connection)
+    if uid.hex().upper() != expected_uid.upper():
+        raise RuntimeError("Recovery UID mismatch")
+    select_ndef_application(connection)
+    version = get_version(connection)
+    validate_version(version, uid)
+    settings = get_file_settings(connection)
+    if settings != EXPECTED_FACTORY_FILE_SETTINGS:
+        raise RuntimeError("Recovery requires unchanged factory NDEF settings")
+    authenticated = authenticate_ev2_first_with_key(connection, 0, FACTORY_KEY_0)
+    coordinator = LiveProvisioningCoordinator(
+        journal,
+        LiveSession(
+            authenticated.ti,
+            authenticated.session_enc_key,
+            authenticated.session_mac_key,
+        ),
+    )
+
+    from ntag424_live_provision import write_ndef_verified, verify_ndef_readback
+    write_ndef_verified(connection, coordinator.session, plan.ndef_file, authority)
+    ndef_readback = read_full_ndef_file(connection)
+    verify_ndef_readback(plan.ndef_file, ndef_readback)
+    journal.confirm("ndef_readback_verified", ndef_readback)
+
+    select_ndef_application(connection)
+    restored = authenticate_ev2_first_with_key(connection, 0, FACTORY_KEY_0)
+    coordinator.session = LiveSession(
+        restored.ti, restored.session_enc_key, restored.session_mac_key
+    )
+    coordinator.apply_and_verify_sdm(
+        connection, lambda: get_file_settings(connection), authority
+    )
+    coordinator.replace_key_zero(connection, keys[0], authority)
+    dynamic_ndef = read_full_ndef_file(connection)
+    sun_uid, counter, mac = extract_sun_fields(dynamic_ndef)
+    coordinator.complete(connection, keys[0], keys[1], sun_uid, counter, mac)
+    return journal
+
+
 def safety_check():
     try:
         execute_live(
@@ -148,6 +209,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--safety-check", action="store_true")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--recover", action="store_true")
     parser.add_argument("--arm-release", action="store_true")
     parser.add_argument("--tag-id", default="FUR-000001")
     parser.add_argument("--expected-uid", required=True)
@@ -179,6 +241,15 @@ def main():
                 args.tag_id, args.expected_uid, args.journal, args.authority, release
             )
             print(f"LIVE PROVISIONING: {journal.recovery_action}")
+        elif args.recover:
+            manifest = build_manifest(args.tag_id, args.expected_uid)
+            release = consume_release(
+                args.release_file, args.expected_uid, manifest["manifest_sha256"]
+            )
+            journal = recover_live(
+                args.tag_id, args.expected_uid, args.journal, args.authority, release
+            )
+            print(f"LIVE RECOVERY: {journal.recovery_action}")
         else:
             safety_check()
             print("LIVE EXECUTION WRAPPER READY — ONE-TIME RELEASE REQUIRED")
