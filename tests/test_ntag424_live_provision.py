@@ -64,8 +64,25 @@ class LiveProvisionReleaseCandidateTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             MODULE.write_ndef_verified(None, session, b"short", MODULE.AUTHORISATION_PHRASE)
         payload = bytes(107)
-        MODULE.write_ndef_verified(self.response_connection(session), session, payload, MODULE.AUTHORISATION_PHRASE)
-        self.assertEqual(session.command_counter, 1)
+        class Connection:
+            def transmit(self, apdu):
+                self.apdu = bytes(apdu)
+                return [], 0x90, 0x00
+        connection = Connection()
+        MODULE.write_ndef_verified(connection, session, payload, MODULE.AUTHORISATION_PHRASE)
+        self.assertEqual(connection.apdu[:5], bytes.fromhex("00D600006B"))
+        self.assertEqual(connection.apdu[5:], payload)
+        self.assertEqual(session.command_counter, 0)
+
+    def test_ndef_plain_write_requires_iso_success_status(self):
+        session = MODULE.LiveSession(bytes(4), bytes(16), bytes(16))
+        class Connection:
+            def transmit(self, apdu):
+                return [], 0x91, 0xAE
+        with self.assertRaisesRegex(RuntimeError, "91AE"):
+            MODULE.write_ndef_verified(
+                Connection(), session, bytes(107), MODULE.AUTHORISATION_PHRASE
+            )
 
     def test_ndef_readback_must_match_byte_for_byte(self):
         payload = bytes(range(107))

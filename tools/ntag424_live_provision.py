@@ -19,7 +19,7 @@ from ntag424_provision import EXPECTED_SETTINGS
 from ntag424_live_preflight import FACTORY_KEY_0, authenticate_ev2_first_with_key
 from ntag424_simulate_provision import verify_sun
 from ntag424_recovery_journal import PersistentRecoveryJournal
-from ntag424_write_validate import build_write_data_apdu, verify_protected_response
+from ntag424_write_validate import verify_protected_response
 
 LIVE_EXECUTION_ENABLED = False
 AUTHORISATION_PHRASE = "PROVISION FUR TAG PERMANENTLY"
@@ -71,16 +71,12 @@ def write_ndef_verified(connection, session, ndef_file, authority):
     if len(ndef_file) != 107:
         raise ValueError("FUR NDEF payload must contain exactly 107 bytes")
     require_active_session(session)
-    apdu = build_write_data_apdu(
-        ndef_file, session.enc_key, session.mac_key, session.ti,
-        session.command_counter,
-    )
+    # The factory NDEF file communication mode is Plain. NXP specifies
+    # ISOUpdateBinary as a supported, tearing-protected write for this file.
+    apdu = bytes([0x00, 0xD6, 0x00, 0x00, len(ndef_file)]) + ndef_file
     data, sw1, sw2 = connection.transmit(list(apdu))
-    verify_protected_response(
-        bytes(data) + bytes([sw1, sw2]), session.command_counter,
-        session.ti, session.mac_key,
-    )
-    session.command_counter += 1
+    if data or (sw1, sw2) != (0x90, 0x00):
+        raise RuntimeError(f"ISO NDEF write failed: {sw1:02X}{sw2:02X}")
 
 
 def verify_ndef_readback(expected, received):

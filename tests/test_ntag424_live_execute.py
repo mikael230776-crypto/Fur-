@@ -73,6 +73,29 @@ class LiveExecutionWrapperTests(unittest.TestCase):
         self.assertEqual(coordinator.session.ti, bytes(4))
         self.assertEqual(journal.evidence, b"\x01" * 5)
 
+    def test_recovery_rejects_any_checkpoint_other_than_pending_ndef(self):
+        original_manifest = MODULE.build_manifest
+        original_keys = MODULE.load_production_keys
+        original_load = MODULE.PersistentRecoveryJournal.load
+        MODULE.build_manifest = lambda *_: {"manifest_sha256": "a" * 64}
+        MODULE.load_production_keys = lambda: [bytes(16)] * 5
+        journal = type("Journal", (), {
+            "state": {"checkpoints": [], "pending": None},
+            "recovery_action": "RESUME AT preflight_verified",
+        })()
+        MODULE.PersistentRecoveryJournal.load = lambda *_: journal
+        release = MODULE.ExecutionRelease("044517DA291D90", "a" * 64)
+        try:
+            with self.assertRaisesRegex(RuntimeError, "Unsupported recovery state"):
+                MODULE.recover_live(
+                    "FUR-000001", "044517DA291D90", "/journal",
+                    MODULE.AUTHORISATION_PHRASE, release,
+                )
+        finally:
+            MODULE.build_manifest = original_manifest
+            MODULE.load_production_keys = original_keys
+            MODULE.PersistentRecoveryJournal.load = original_load
+
 
 if __name__ == "__main__":
     unittest.main()
