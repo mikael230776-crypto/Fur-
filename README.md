@@ -106,6 +106,18 @@ enable it for a differently configured tag profile.
 
 Secret keys must never be committed to this repository or exposed in client-side code.
 
+The trusted inspection write endpoint is separately disabled by default. When
+it is eventually deployed, it requires these server-only values:
+
+```text
+ENABLE_PHYSICAL_AUTH_ADMIN=true
+PHYSICAL_AUTH_ADMIN_TOKEN=<long random server-only token>
+```
+
+`POST /api/physical-inspection-admin` accepts a strictly validated inspection
+for an existing physical-authentication profile. Never place the admin token in
+a browser, NFC payload, QR code, repository file or customer-facing application.
+
 ## Tests
 
 Run the automated test suite with:
