@@ -15,6 +15,32 @@ Current Phase 1 flow:
 
 Phase 1 is NFC-only. Later development can extend the system with additional physical authentication technology.
 
+## Phase 6 foundation: NFC plus physical evidence
+
+Phase 6 adds a vendor-neutral physical-authentication layer without weakening
+the NTAG 424 DNA checks. A product can be assigned one active method:
+
+- `TAMPER_EVIDENT`
+- `UV_MARK`
+- `MACHINE_TAGGANT`
+- `FORENSIC_MARKER`
+
+Trusted inspections record `PRESENT`, `ABSENT`, `DAMAGED` or `INCONCLUSIVE`
+in a private append-only evidence ledger. The public verification endpoint can
+read the latest result but cannot submit or change inspection evidence.
+
+The integration is disabled by default. Enable it only after applying the
+Phase 6 database migration and configuring trusted administration controls:
+
+```text
+ENABLE_PHYSICAL_AUTH=true
+```
+
+When enabled, a required physical check can produce
+`PHYSICAL_CHECK_REQUIRED`, `REVIEW_REQUIRED` or `NOT_VERIFIED`. Only a passed
+physical inspection can preserve the final `VERIFIED` result for a product
+with an active physical-authentication profile.
+
 ## Tag format
 
 Valid product tag IDs use this format:
