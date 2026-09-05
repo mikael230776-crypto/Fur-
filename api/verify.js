@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { aesCmac, hexToBuffer, secureEqual, truncateSdmMac } from "./sun-crypto.js";
+import { getPhysicalAuthSummary, physicalAuthEnabled } from "./physical-auth.js";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
@@ -432,6 +433,61 @@ return res.status(responseStatus).json(
       );
     }
 
+    let physicalAuthentication = { required: false, status: "NOT_REQUIRED" };
+    if (physicalAuthEnabled()) {
+      const physicalAuthResult = await getPhysicalAuthSummary(
+        supabaseUrl,
+        supabaseSecretKey,
+        tagId,
+        supabaseHeaders(supabaseSecretKey)
+      );
+
+      if (!physicalAuthResult.ok) {
+        return res.status(502).json(
+          buildResponse("ERROR", { message: physicalAuthResult.message })
+        );
+      }
+
+      physicalAuthentication = physicalAuthResult.summary;
+
+      if (physicalAuthentication.status === "FAILED") {
+        if (!(await recordScan("NOT_VERIFIED"))) {
+          return res.status(502).json(
+            buildResponse("ERROR", { message: "Scan history could not be saved" })
+          );
+        }
+        return res.status(403).json(
+          buildResponse("NOT_VERIFIED", {
+            tagId,
+            product: product.product,
+            brand: product.brand,
+            physicalAuthentication,
+            message: "Physical authentication failed"
+          })
+        );
+      }
+
+      if (["NOT_INSPECTED", "REVIEW_REQUIRED"].includes(physicalAuthentication.status)) {
+        const resultStatus = physicalAuthentication.status === "NOT_INSPECTED"
+          ? "PHYSICAL_CHECK_REQUIRED"
+          : "REVIEW_REQUIRED";
+        if (!(await recordScan(resultStatus))) {
+          return res.status(502).json(
+            buildResponse("ERROR", { message: "Scan history could not be saved" })
+          );
+        }
+        return res.status(200).json(
+          buildResponse(resultStatus, {
+            tagId,
+            product: product.product,
+            brand: product.brand,
+            physicalAuthentication,
+            message: "Physical authentication is not complete"
+          })
+        );
+      }
+    }
+
     const verificationLookupEndpoint =
       `${supabaseUrl}/rest/v1/verification_records` +
       `?tag_id=eq.${encodeURIComponent(product.tag_id)}` +
@@ -538,7 +594,8 @@ return res.status(responseStatus).json(
         product: savedRecord.product ?? product.product,
         brand: savedRecord.brand ?? product.brand,
         verificationId: savedRecord.verification_id,
-        verifiedAt: savedRecord.created_at
+        verifiedAt: savedRecord.created_at,
+        physicalAuthentication
       })
     );
   } catch (error) {
@@ -558,6 +615,7 @@ export {
   getTagLogState,
   resetRateLimits,
   saveVerificationScan,
+  physicalAuthEnabled,
   scanHistoryEnabled,
   sunValidationEnabled,
   validateSunMac,
