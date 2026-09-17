@@ -323,7 +323,7 @@ try {
    const nfcTagEndpoint =
     `${supabaseUrl}/rest/v1/nfc_tags` +
     `?tag_id=eq.${encodeURIComponent(tagId)}` +
-    `      `&select=tag_id,tag_uid,status,last_verified_counter` +
+    ` `&select=tag_id,tag_uid,status,last_verified_counter +     `
     `&limit=1`;
 
   const nfcTagResponse = await fetch(nfcTagEndpoint, {
