@@ -283,7 +283,16 @@ export default async function handler(req, res) {
 
     authenticatedUid = uid;
   }
-let repeatedScanDetected = false;
+  let authenticatedCounter = null;
+  if (sunValidationEnabled()) {
+    authenticatedCounter = parseInt(req.query?.ctr, 16);
+    if (!Number.isFinite(authenticatedCounter)) {
+      return res.status(400).json(
+        buildResponse("ERROR", { message: "Invalid SUN counter" })
+      );
+    }
+  }
+  let repeatedScanDetected = false;
   async function recordScan(resultStatus) {
   if (!scanHistoryEnabled()) return true;
 
@@ -314,7 +323,7 @@ try {
    const nfcTagEndpoint =
     `${supabaseUrl}/rest/v1/nfc_tags` +
     `?tag_id=eq.${encodeURIComponent(tagId)}` +
-    `&select=tag_id,tag_uid,status` +
+    `      `&select=tag_id,tag_uid,status,last_verified_counter` +
     `&limit=1`;
 
   const nfcTagResponse = await fetch(nfcTagEndpoint, {
@@ -359,6 +368,19 @@ try {
       })
     );
   }
+  if (
+    authenticatedCounter !== null &&
+    authenticatedCounter <= (nfcTag.last_verified_counter ?? -1)
+  ) {
+    return res.status(403).json(
+      buildResponse("NOT_VERIFIED", {
+        tagId,
+        message: "Replayed or stale scan detected"
+      })
+    );
+  }
+  
+  
 
   if (nfcTag.status !== "ACTIVE") {
     const resultStatus = ["SUSPENDED", "REPLACED"].includes(nfcTag.status)
@@ -584,7 +606,40 @@ return res.status(responseStatus).json(
           message: "Scan history could not be saved"
         })
       );
-    }if (repeatedScanDetected) {
+    }        
+    
+
+        if (authenticatedCounter !== null) {
+          const counterUpdateEndpoint =
+            `${supabaseUrl}/rest/v1/nfc_tags` +
+            `?tag_id=eq.${encodeURIComponent(tagId)}` +
+            `&last_verified_counter=lt.${authenticatedCounter}`;
+
+          const counterUpdateResponse = await fetch(counterUpdateEndpoint, {
+            method: "PATCH",
+            headers: supabaseHeaders(supabaseSecretKey, {
+              "Content-Type": "application/json",
+              Prefer: "return=representation"
+            }),
+            body: JSON.stringify({ last_verified_counter: authenticatedCounter })
+          });
+
+          if (!counterUpdateResponse.ok) {
+            console.error("Counter update failed:", await counterUpdateResponse.text());
+          } else {
+            const updatedRows = await counterUpdateResponse.json();
+            if (updatedRows.length === 0) {
+              return res.status(403).json(
+                buildResponse("NOT_VERIFIED", {
+                  tagId,
+                  message: "Replayed or stale scan detected"
+                })
+              );
+            }
+          }
+        }
+
+            if (repeatedScanDetected) {
   console.warn("VERIFIED product has repeated scan history");
 }
 
