@@ -17,8 +17,16 @@ function getClientIp(req) {
 
   return firstForwarded || req.socket?.remoteAddress || "unknown";
 }
+function removeExpiredRateLimits(now = Date.now()) {
+  for (const [clientIp, entry] of rateLimitStore.entries()) {
+    if (now - entry.startedAt >= RATE_LIMIT_WINDOW_MS) {
+    rateLimitStore.delete(clientIp);
+    }
+  }
+}
 
 function checkRateLimit(req, now = Date.now()) {
+    removeExpiredRateLimits(now);
   const clientIp = getClientIp(req);
   const current = rateLimitStore.get(clientIp);
 
@@ -613,8 +621,10 @@ export {
   checkRateLimit,
   createVerificationId,
   getTagLogState,
+    removeExpiredRateLimits,
   resetRateLimits,
   saveVerificationScan,
+  
   physicalAuthEnabled,
   scanHistoryEnabled,
   sunValidationEnabled,
