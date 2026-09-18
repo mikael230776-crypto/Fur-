@@ -1,8 +1,9 @@
 import test from "node:test";
-import assert from "node:assert/strict";
+ import assert from "node:assert/strict";
 import handler, {
   checkRateLimit,
   createVerificationId,
+    removeExpiredRateLimits,
   resetRateLimits,
   saveVerificationScan,
   scanHistoryEnabled
@@ -288,6 +289,17 @@ test("allows requests again after the rate-limit window", () => {
 
   assert.equal(checkRateLimit(req, 1_000).allowed, false);
   assert.equal(checkRateLimit(req, 61_000).allowed, true);
+});
+test("removes expired rate-limit entries", () => {
+  resetRateLimits();
+  const store = globalThis.__furVerificationRateLimits;
+  store.set("203.0.113.20", { count: 1, startedAt: 1_000 });
+  store.set("203.0.113.21", { count: 1, startedAt: 30_000 });
+
+  removeExpiredRateLimits(61_000);
+
+  assert.equal(store.has("203.0.113.20"), false);
+  assert.equal(store.has("203.0.113.21"), true);
 });
 
 test("rejects non-GET verification requests", async () => {
