@@ -120,11 +120,11 @@ A sample can be accepted for a limited pilot only when:
 - environmental results meet the agreed customer use case; and
 - evidence is complete and independently reviewable.
 
-Decision: ACCEPT FOR PILOT / REJECT / MORE EVIDENCE REQUIRED
+Decision: ACCEPT  FOR PILOT
 
-Approver:
+Approver: MICHAEL HAMPEL
 
-Date:
+Date: 28 September 2026
 
 Conditions or open issues:
 
