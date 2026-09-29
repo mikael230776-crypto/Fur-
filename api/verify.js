@@ -111,6 +111,38 @@ function supabaseHeaders(supabaseSecretKey, extras = {}) {
     ...extras
   };
 }
+async function acceptNtag424Counter(
+  supabaseUrl,
+  supabaseSecretKey,
+  uid,
+  counter
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/rpc/accept_ntag424_counter`,
+    {
+      method: "POST",
+      headers: supabaseHeaders(supabaseSecretKey, {
+        "Content-Type": "application/json"
+      }),
+      body: JSON.stringify({
+        p_uid: uid,
+        p_counter: Number.parseInt(counter, 16)
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(
+      "NTAG 424 counter check failed:",
+      response.status,
+      errorText
+    );
+    return false;
+  }
+
+  return response.json();
+}
 async function getRecentVerificationScans(
   supabaseUrl,
   supabaseSecretKey,
@@ -380,6 +412,23 @@ try {
       })
     );
   }
+  if (authenticatedUid && sunValidationEnabled()) {
+  const counterAccepted = await acceptNtag424Counter(
+    supabaseUrl,
+    supabaseSecretKey,
+    authenticatedUid,
+    counter
+  );
+
+  if (!counterAccepted) {
+    return res.status(403).json(
+      buildResponse("NOT_VERIFIED", {
+        tagId,
+        message: "NTAG 424 DNA counter replay detected"
+      })
+    );
+  }
+}
   const productEndpoint =
     `${supabaseUrl}/rest/v1/Products` +
     `?tag_id=eq.${encodeURIComponent(tagId)}` +
