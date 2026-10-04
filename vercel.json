@@ -4,7 +4,16 @@
       "maxDuration": 10
     }
   },
-  "headers": [
+  "rewrites": [
+  {
+    "source": "/api/dpp/01/:gtin/21/:serialNumber",
+    "destination": "/api/dpp?gtin=:gtin&serialNumber=:serialNumber"
+  },
+  {
+    "source": "/01/:gtin/21/:serialNumber",
+    "destination": "/api/dpp?gtin=:gtin&serialNumber=:serialNumber"
+  }
+],"headers": [
     {
       "source": "/(.*)",
       "headers": [
@@ -32,3 +41,4 @@
     }
   ]
 }
+
