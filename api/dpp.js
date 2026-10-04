@@ -153,7 +153,7 @@ export default async function handler(req, res) {
     const productRows = await readSupabase(
       url,
       secret,
-      `products?select=product,brand,status&tag_id=eq.${encodeURIComponent(
+      Products?select=product,brand,status&tag_id=eq.${encodeURIComponent(
         passport.fur_tag_id
       )}&limit=1`
     );
