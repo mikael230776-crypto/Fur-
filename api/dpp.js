@@ -148,12 +148,12 @@ export default async function handler(req, res) {
         "No public DPP passport exists for this identifier",
         requestId
       );
-    }
+     }
 
     const productRows = await readSupabase(
       url,
       secret,
-      Products?select=product,brand,status&tag_id=eq.${encodeURIComponent(
+      `Products?select=product,brand,status&tag_id=eq.${encodeURIComponent(
         passport.fur_tag_id
       )}&limit=1`
     );
